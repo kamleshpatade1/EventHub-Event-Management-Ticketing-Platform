@@ -140,6 +140,14 @@ test(
       });
     }
 
+    function authenticatedGet(path, userId) {
+      return fetch(`${baseUrl}${path}`, {
+        headers: {
+          cookie: `accessToken=${tokenFor(userId)}`,
+        },
+      });
+    }
+
     async function createEvent() {
       const startAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const event = await prisma.event.create({
@@ -286,6 +294,89 @@ test(
         assert.ok(persisted.ticketCode);
         assert.equal(persisted.payment.status, 'PAID');
         assert.match(persisted.payment.providerPaymentId, /^test_payment_/);
+      }
+    );
+
+    await t.test(
+      'paid booking completes checkout, webhook, reconciliation, and ticket retrieval',
+      async () => {
+        const event = await createEvent();
+        const bookingResponse = await authenticatedPost(
+          `/api/events/${event.id}/bookings/paid`,
+          attendee.id
+        );
+        const bookingBody = await bookingResponse.json();
+        const booking = bookingBody.data.booking;
+        createdBookingIds.push(booking.id);
+
+        assert.equal(bookingResponse.status, 201);
+        assert.equal(booking.status, 'PENDING_PAYMENT');
+        assert.equal(bookingBody.data.payment.status, 'OPEN');
+
+        const checkoutResponse = await authenticatedPost(
+          `/api/bookings/${booking.id}/checkout`,
+          attendee.id
+        );
+        const checkoutBody = await checkoutResponse.json();
+        const checkout = checkoutBody.data.checkout;
+
+        assert.equal(checkoutResponse.status, 200);
+        assert.ok(checkout.id);
+
+        const payResponse = await authenticatedPost(
+          `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+          attendee.id,
+          { status: 'PAID' }
+        );
+        const payBody = await payResponse.json();
+        await recordTestEndpointWebhookIds(checkout.id);
+
+        assert.equal(payResponse.status, 200);
+        assert.equal(payBody.data.bookingId, booking.id);
+        assert.equal(payBody.data.received, true);
+        assert.equal(payBody.data.duplicate, false);
+        assert.equal(
+          await prisma.processedWebhook.count({
+            where: {
+              provider: 'razorpay',
+              providerEventId: { startsWith: `test_${checkout.id}_` },
+            },
+          }),
+          1
+        );
+
+        const reconciliationResponse = await authenticatedPost(
+          `/api/bookings/${booking.id}/reconcile`,
+          attendee.id
+        );
+        const reconciliationBody = await reconciliationResponse.json();
+
+        assert.equal(reconciliationResponse.status, 200);
+        assert.equal(reconciliationBody.data.booking.status, 'CONFIRMED');
+        assert.equal(reconciliationBody.data.payment.status, 'PAID');
+
+        const bookingDetailsResponse = await authenticatedGet(
+          `/api/bookings/${booking.id}`,
+          attendee.id
+        );
+        const bookingDetailsBody = await bookingDetailsResponse.json();
+        const ticketResponse = await authenticatedGet(
+          `/api/bookings/${booking.id}/ticket`,
+          attendee.id
+        );
+        const ticketBody = await ticketResponse.json();
+        const persistedBooking = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(bookingDetailsResponse.status, 200);
+        assert.equal(bookingDetailsBody.data.status, 'CONFIRMED');
+        assert.equal(ticketResponse.status, 200);
+        assert.match(ticketBody.data.ticketCode, /^[A-Za-z0-9_-]{20,}$/);
+        assert.equal(persistedBooking.status, 'CONFIRMED');
+        assert.equal(persistedBooking.ticketCode, ticketBody.data.ticketCode);
+        assert.equal(persistedBooking.payment.status, 'PAID');
       }
     );
 
