@@ -149,13 +149,18 @@ export default function EventDetails() {
           { method: 'POST' }
         );
         const booking = bookingResponse.data?.booking;
+        const alreadyBooked = bookingResponse.created === false;
 
         if (!booking?.id) {
           throw new Error('The booking response did not include a booking ID.');
         }
 
         if (booking.status !== 'PENDING_PAYMENT') {
-          navigate(`/bookings/${encodeURIComponent(booking.id)}`);
+          navigate(`/bookings/${encodeURIComponent(booking.id)}`, {
+            state: alreadyBooked
+              ? { notice: 'You already have an active booking for this event.' }
+              : undefined,
+          });
           return;
         }
 
@@ -171,7 +176,17 @@ export default function EventDetails() {
           );
         }
 
-        navigate(`/checkout/test/${encodeURIComponent(checkoutId)}`);
+        navigate(
+          `/checkout/test/${encodeURIComponent(checkoutId)}?bookingId=${encodeURIComponent(booking.id)}`,
+          {
+            state: alreadyBooked
+              ? {
+                  notice:
+                    'You already have an active booking. Continue its checkout below.',
+                }
+              : undefined,
+          }
+        );
         return;
       }
 
@@ -185,7 +200,12 @@ export default function EventDetails() {
         throw new Error('The booking response did not include a booking ID.');
       }
 
-      navigate(`/bookings/${encodeURIComponent(booking.id)}`);
+      navigate(`/bookings/${encodeURIComponent(booking.id)}`, {
+        state:
+          bookingResponse.created === false
+            ? { notice: 'You already have an active booking for this event.' }
+            : undefined,
+      });
     } catch (requestError) {
       if (
         requestError?.status === 401 ||

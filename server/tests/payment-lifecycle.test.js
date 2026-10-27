@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { test } from 'node:test';
 import jwt from 'jsonwebtoken';
 import {
+  clearTestCheckoutSessions,
   getTestCheckoutSession,
   setTestCheckoutStatus,
 } from '../src/services/test-payment-provider.js';
@@ -218,6 +219,265 @@ test(
       webhookEventIds.push(payload.eventId);
       return postWebhook(payload, signatureOverride);
     }
+
+    async function recordTestEndpointWebhookIds(checkoutId) {
+      const generated = await prisma.processedWebhook.findMany({
+        where: {
+          provider: 'razorpay',
+          providerEventId: { startsWith: `test_${checkoutId}_` },
+        },
+        select: { providerEventId: true },
+      });
+      webhookEventIds.push(...generated.map((event) => event.providerEventId));
+    }
+
+    await t.test(
+      'test checkout endpoint is unavailable outside test mode',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        process.env.PAYMENT_PROVIDER_MODE = 'live';
+
+        let response;
+        try {
+          response = await authenticatedPost(
+            `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+            attendee.id,
+            { status: 'PAID' }
+          );
+        } finally {
+          process.env.PAYMENT_PROVIDER_MODE = 'test';
+        }
+
+        const body = await response.json();
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(response.status, 503);
+        assert.equal(body.error.code, 'PAYMENT_PROVIDER_UNAVAILABLE');
+        assert.equal(persisted.status, 'PENDING_PAYMENT');
+        assert.equal(persisted.payment.status, 'OPEN');
+        assert.equal(getTestCheckoutSession(checkout.id).status, 'OPEN');
+      }
+    );
+
+    await t.test(
+      'test checkout Pay action processes a signed webhook',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        const response = await authenticatedPost(
+          `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+          attendee.id,
+          { status: 'PAID' }
+        );
+        const body = await response.json();
+        await recordTestEndpointWebhookIds(checkout.id);
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(response.status, 200);
+        assert.equal(body.data.bookingId, booking.id);
+        assert.equal(body.data.received, true);
+        assert.equal(body.data.duplicate, false);
+        assert.equal(persisted.status, 'CONFIRMED');
+        assert.ok(persisted.ticketCode);
+        assert.equal(persisted.payment.status, 'PAID');
+        assert.match(persisted.payment.providerPaymentId, /^test_payment_/);
+      }
+    );
+
+    await t.test(
+      'test checkout Fail action processes a signed webhook',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        const response = await authenticatedPost(
+          `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+          attendee.id,
+          { status: 'FAILED' }
+        );
+        const body = await response.json();
+        await recordTestEndpointWebhookIds(checkout.id);
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(response.status, 200);
+        assert.equal(body.data.bookingId, booking.id);
+        assert.equal(body.data.received, true);
+        assert.equal(body.data.duplicate, false);
+        assert.equal(persisted.status, 'EXPIRED');
+        assert.equal(persisted.ticketCode, null);
+        assert.equal(persisted.payment.status, 'EXPIRED');
+      }
+    );
+
+    await t.test(
+      'reconciliation preserves final payment outcomes after provider session loss',
+      async () => {
+        for (const [status, expectedBookingStatus, expectedPaymentStatus] of [
+          ['PAID', 'CONFIRMED', 'PAID'],
+          ['FAILED', 'EXPIRED', 'EXPIRED'],
+        ]) {
+          const { booking, checkout } = await reserveAndCheckout();
+          const outcome = await authenticatedPost(
+            `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+            attendee.id,
+            { status }
+          );
+          assert.equal(outcome.status, 200);
+          await recordTestEndpointWebhookIds(checkout.id);
+
+          clearTestCheckoutSessions();
+
+          const response = await authenticatedPost(
+            `/api/bookings/${booking.id}/reconcile`,
+            attendee.id
+          );
+          const body = await response.json();
+
+          assert.equal(response.status, 200);
+          assert.equal(body.data.booking.status, expectedBookingStatus);
+          assert.equal(body.data.payment.status, expectedPaymentStatus);
+        }
+      }
+    );
+
+    await t.test(
+      'reconciliation does not treat a missing open test session as verified OPEN',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        clearTestCheckoutSessions();
+
+        const unavailable = await authenticatedPost(
+          `/api/bookings/${booking.id}/reconcile`,
+          attendee.id
+        );
+        const unavailableBody = await unavailable.json();
+        const unchanged = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(unavailable.status, 503);
+        assert.equal(
+          unavailableBody.error.code,
+          'CHECKOUT_SESSION_UNAVAILABLE'
+        );
+        assert.equal(unchanged.status, 'PENDING_PAYMENT');
+        assert.equal(unchanged.payment.status, 'OPEN');
+
+        const resumed = await authenticatedPost(
+          `/api/bookings/${booking.id}/checkout`,
+          attendee.id
+        );
+        const resumedBody = await resumed.json();
+        assert.equal(resumed.status, 200);
+        assert.equal(resumedBody.data.checkout.id, checkout.id);
+        assert.equal(getTestCheckoutSession(checkout.id).status, 'OPEN');
+      }
+    );
+
+    await t.test(
+      'test checkout requires authentication and prevents cross-user actions',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        const path = `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`;
+        const unauthenticated = await fetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ status: 'PAID' }),
+        });
+        const unauthorizedBody = await unauthenticated.json();
+        const crossUser = await authenticatedPost(path, otherAttendee.id, {
+          status: 'PAID',
+        });
+        const crossUserBody = await crossUser.json();
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(unauthenticated.status, 401);
+        assert.equal(unauthorizedBody.error.code, 'UNAUTHENTICATED');
+        assert.equal(crossUser.status, 404);
+        assert.equal(crossUserBody.error.code, 'CHECKOUT_NOT_FOUND');
+        assert.equal(persisted.status, 'PENDING_PAYMENT');
+        assert.equal(persisted.payment.status, 'OPEN');
+      }
+    );
+
+    await t.test(
+      'test checkout rejects invalid status and unknown checkout IDs',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        const invalidStatus = await authenticatedPost(
+          `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+          attendee.id,
+          { status: 'OPEN' }
+        );
+        const invalidBody = await invalidStatus.json();
+        const unknownCheckout = await authenticatedPost(
+          `/api/test-checkouts/test_checkout_${randomUUID()}/outcome`,
+          attendee.id,
+          { status: 'PAID' }
+        );
+        const unknownBody = await unknownCheckout.json();
+        const malformedCheckout = await authenticatedPost(
+          '/api/test-checkouts/not-a-checkout/outcome',
+          attendee.id,
+          { status: 'PAID' }
+        );
+        const malformedBody = await malformedCheckout.json();
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(invalidStatus.status, 400);
+        assert.equal(invalidBody.error.code, 'INVALID_TEST_PAYMENT_STATUS');
+        assert.equal(unknownCheckout.status, 404);
+        assert.equal(unknownBody.error.code, 'CHECKOUT_NOT_FOUND');
+        assert.equal(malformedCheckout.status, 404);
+        assert.equal(malformedBody.error.code, 'CHECKOUT_NOT_FOUND');
+        assert.equal(persisted.status, 'PENDING_PAYMENT');
+        assert.equal(persisted.payment.status, 'OPEN');
+      }
+    );
+
+    await t.test(
+      'test checkout reports a missing webhook secret without changing state',
+      async () => {
+        const { booking, checkout } = await reserveAndCheckout();
+        const originalSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+        delete process.env.PAYMENT_WEBHOOK_SECRET;
+
+        let response;
+        try {
+          response = await authenticatedPost(
+            `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`,
+            attendee.id,
+            { status: 'PAID' }
+          );
+        } finally {
+          process.env.PAYMENT_WEBHOOK_SECRET = originalSecret;
+        }
+
+        const body = await response.json();
+        const persisted = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: { payment: true },
+        });
+
+        assert.equal(response.status, 503);
+        assert.equal(body.error.code, 'PAYMENT_WEBHOOK_NOT_CONFIGURED');
+        assert.equal(persisted.status, 'PENDING_PAYMENT');
+        assert.equal(persisted.payment.status, 'OPEN');
+      }
+    );
 
     await t.test(
       'checkout is owner-only and reuses a database-priced provider session',
