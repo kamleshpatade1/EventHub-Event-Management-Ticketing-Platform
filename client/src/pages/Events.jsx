@@ -56,6 +56,8 @@ export default function Events() {
   const category = searchParams.get('category') || 'All';
   const city = searchParams.get('city') || '';
   const pricing = searchParams.get('pricing') || '';
+  const from = searchParams.get('from') || '';
+  const to = searchParams.get('to') || '';
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +72,8 @@ export default function Events() {
         if (category !== 'All') params.set('category', category);
         if (city.trim()) params.set('city', city.trim());
         if (pricing) params.set('pricing', pricing);
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
         params.set('page', searchParams.get('page') || '1');
         params.set('limit', '12');
 
@@ -93,15 +97,28 @@ export default function Events() {
     return () => {
       cancelled = true;
     };
-  }, [search, category, city, pricing, searchParams]);
+  }, [search, category, city, pricing, from, to, searchParams]);
 
   function updateFilter(key, value) {
     const next = new URLSearchParams(searchParams);
 
-    if (value && value !== 'All') next.set(key, value);
-    else next.delete(key);
+    if (key === 'page') {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    } else {
+      if (value && value !== 'All') next.set(key, value);
+      else next.delete(key);
+      next.delete('page');
+    }
 
-    next.delete('page');
+    setSearchParams(next);
+  }
+
+  function clearFilters() {
+    const next = new URLSearchParams(searchParams);
+    ['q', 'category', 'city', 'pricing', 'from', 'to', 'page'].forEach((key) =>
+      next.delete(key)
+    );
     setSearchParams(next);
   }
 
@@ -186,6 +203,40 @@ export default function Events() {
               </option>
             </select>
           </label>
+
+          <label className="flex flex-col gap-1 rounded-xl border border-gray-800 bg-gray-900 px-3 py-2">
+            <span className="text-xs text-gray-500">From date</span>
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(event) => updateFilter('from', event.target.value)}
+              aria-label="From date"
+              className="bg-transparent text-sm text-white outline-none"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 rounded-xl border border-gray-800 bg-gray-900 px-3 py-2">
+            <span className="text-xs text-gray-500">To date</span>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(event) => updateFilter('to', event.target.value)}
+              aria-label="To date"
+              className="bg-transparent text-sm text-white outline-none"
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-purple-500/60 hover:text-white"
+          >
+            Clear filters
+          </button>
         </div>
 
         <div className="mb-5 mt-8 flex items-center justify-between gap-3">
@@ -236,7 +287,7 @@ export default function Events() {
             </p>
             <button
               type="button"
-              onClick={() => setSearchParams({})}
+              onClick={clearFilters}
               className="mt-5 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold hover:bg-purple-500"
             >
               Clear filters
