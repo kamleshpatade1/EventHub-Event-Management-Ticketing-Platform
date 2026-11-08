@@ -60,6 +60,7 @@ export default function Events() {
   const to = searchParams.get('to') || '';
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
 
     async function loadEvents() {
@@ -77,14 +78,16 @@ export default function Events() {
         params.set('page', searchParams.get('page') || '1');
         params.set('limit', '12');
 
-        const result = await api(`/events?${params.toString()}`);
+        const result = await api(`/events?${params.toString()}`, {
+          signal: controller.signal,
+        });
 
         if (!cancelled) {
           setEvents(Array.isArray(result.data) ? result.data : []);
           setPagination(result.pagination || null);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && err.name !== 'AbortError') {
           setError(err.message || 'Unable to load events. Please try again.');
         }
       } finally {
@@ -92,10 +95,12 @@ export default function Events() {
       }
     }
 
-    loadEvents();
+    const timeoutId = setTimeout(loadEvents, 300);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
     };
   }, [search, category, city, pricing, from, to, searchParams]);
 
