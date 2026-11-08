@@ -12,7 +12,30 @@ function parseDate(value, field) {
     throw new HttpError(400, 'INVALID_QUERY', `Invalid ${field} date.`);
   }
 
-  const date = new Date(value);
+  const normalizedValue = value.trim();
+  const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (dateOnlyPattern.test(normalizedValue)) {
+    const [year, month, day] = normalizedValue.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      throw new HttpError(400, 'INVALID_QUERY', `Invalid ${field} date.`);
+    }
+
+    // A date-only "to" value includes the entire calendar day.
+    if (field === 'to') {
+      date.setUTCDate(date.getUTCDate() + 1);
+    }
+
+    return date;
+  }
+
+  const date = new Date(normalizedValue);
 
   if (Number.isNaN(date.getTime())) {
     throw new HttpError(400, 'INVALID_QUERY', `Invalid ${field} date.`);
@@ -134,7 +157,7 @@ export async function listPublicEvents(query) {
   // Events must be published, visible, and upcoming.
   const startAtFilter = {
     gte: fromDate && fromDate > now ? fromDate : now,
-    ...(toDate ? { lte: toDate } : {}),
+    ...(toDate ? { lt: toDate } : {}),
   };
 
   const where = {
