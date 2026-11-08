@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CalendarDays, MapPin, Search, Ticket, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api.js';
+import {
+  buildCatalogQuery,
+  clearCatalogFilters,
+  updateCatalogFilter,
+} from './eventCatalog.js';
 
 const categories = [
   'All',
@@ -68,17 +73,16 @@ export default function Events() {
       setError('');
 
       try {
-        const params = new URLSearchParams();
-        if (search.trim()) params.set('q', search.trim());
-        if (category !== 'All') params.set('category', category);
-        if (city.trim()) params.set('city', city.trim());
-        if (pricing) params.set('pricing', pricing);
-        if (from) params.set('from', from);
-        if (to) params.set('to', to);
-        params.set('page', searchParams.get('page') || '1');
-        params.set('limit', '12');
-
-        const result = await api(`/events?${params.toString()}`, {
+        const path = buildCatalogQuery({
+          search,
+          category,
+          city,
+          pricing,
+          from,
+          to,
+          page: searchParams.get('page') || '1',
+        });
+        const result = await api(path, {
           signal: controller.signal,
         });
 
@@ -105,26 +109,11 @@ export default function Events() {
   }, [search, category, city, pricing, from, to, searchParams]);
 
   function updateFilter(key, value) {
-    const next = new URLSearchParams(searchParams);
-
-    if (key === 'page') {
-      if (value) next.set(key, value);
-      else next.delete(key);
-    } else {
-      if (value && value !== 'All') next.set(key, value);
-      else next.delete(key);
-      next.delete('page');
-    }
-
-    setSearchParams(next);
+    setSearchParams(updateCatalogFilter(searchParams, key, value));
   }
 
   function clearFilters() {
-    const next = new URLSearchParams(searchParams);
-    ['q', 'category', 'city', 'pricing', 'from', 'to', 'page'].forEach((key) =>
-      next.delete(key)
-    );
-    setSearchParams(next);
+    setSearchParams(clearCatalogFilters(searchParams));
   }
 
   return (
