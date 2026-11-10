@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CalendarDays, MapPin, Search, Ticket, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api.js';
+import {
+  buildCatalogQuery,
+  clearCatalogFilters,
+  updateCatalogFilter,
+} from './eventCatalog.js';
 
 const categories = [
   'All',
@@ -56,8 +61,11 @@ export default function Events() {
   const category = searchParams.get('category') || 'All';
   const city = searchParams.get('city') || '';
   const pricing = searchParams.get('pricing') || '';
+  const from = searchParams.get('from') || '';
+  const to = searchParams.get('to') || '';
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
 
     async function loadEvents() {
@@ -65,22 +73,25 @@ export default function Events() {
       setError('');
 
       try {
-        const params = new URLSearchParams();
-        if (search.trim()) params.set('q', search.trim());
-        if (category !== 'All') params.set('category', category);
-        if (city.trim()) params.set('city', city.trim());
-        if (pricing) params.set('pricing', pricing);
-        params.set('page', searchParams.get('page') || '1');
-        params.set('limit', '12');
-
-        const result = await api(`/events?${params.toString()}`);
+        const path = buildCatalogQuery({
+          search,
+          category,
+          city,
+          pricing,
+          from,
+          to,
+          page: searchParams.get('page') || '1',
+        });
+        const result = await api(path, {
+          signal: controller.signal,
+        });
 
         if (!cancelled) {
           setEvents(Array.isArray(result.data) ? result.data : []);
           setPagination(result.pagination || null);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && err.name !== 'AbortError') {
           setError(err.message || 'Unable to load events. Please try again.');
         }
       } finally {
@@ -88,21 +99,21 @@ export default function Events() {
       }
     }
 
-    loadEvents();
+    const timeoutId = setTimeout(loadEvents, 300);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, [search, category, city, pricing, searchParams]);
+  }, [search, category, city, pricing, from, to, searchParams]);
 
   function updateFilter(key, value) {
-    const next = new URLSearchParams(searchParams);
+    setSearchParams(updateCatalogFilter(searchParams, key, value));
+  }
 
-    if (value && value !== 'All') next.set(key, value);
-    else next.delete(key);
-
-    next.delete('page');
-    setSearchParams(next);
+  function clearFilters() {
+    setSearchParams(clearCatalogFilters(searchParams));
   }
 
   return (
@@ -186,6 +197,40 @@ export default function Events() {
               </option>
             </select>
           </label>
+
+          <label className="flex flex-col gap-1 rounded-xl border border-gray-800 bg-gray-900 px-3 py-2">
+            <span className="text-xs text-gray-500">From date</span>
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(event) => updateFilter('from', event.target.value)}
+              aria-label="From date"
+              className="bg-transparent text-sm text-white outline-none"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 rounded-xl border border-gray-800 bg-gray-900 px-3 py-2">
+            <span className="text-xs text-gray-500">To date</span>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(event) => updateFilter('to', event.target.value)}
+              aria-label="To date"
+              className="bg-transparent text-sm text-white outline-none"
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-purple-500/60 hover:text-white"
+          >
+            Clear filters
+          </button>
         </div>
 
         <div className="mb-5 mt-8 flex items-center justify-between gap-3">
@@ -236,7 +281,7 @@ export default function Events() {
             </p>
             <button
               type="button"
-              onClick={() => setSearchParams({})}
+              onClick={clearFilters}
               className="mt-5 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold hover:bg-purple-500"
             >
               Clear filters
