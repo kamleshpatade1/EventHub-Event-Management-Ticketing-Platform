@@ -59,6 +59,10 @@ export function getBookingState(event, now = new Date()) {
     return { status: 'unavailable', canBook: false };
   }
 
+  if (!isEventFree(event) && !isEventPaid(event)) {
+    return { status: 'unavailable', canBook: false };
+  }
+
   if (Number.isFinite(event?.availability) && event.availability > 0) {
     return { status: 'available', canBook: true };
   }

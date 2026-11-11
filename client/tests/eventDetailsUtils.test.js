@@ -45,6 +45,16 @@ test('paid event with available seats can be booked', () => {
   });
 });
 
+test('event with missing, invalid, or negative price cannot be booked', () => {
+  for (const priceMinor of [undefined, 'invalid', NaN, -1]) {
+    assert.deepEqual(
+      getBookingState(createEvent({ priceMinor }), now),
+      { status: 'unavailable', canBook: false },
+      `priceMinor: ${String(priceMinor)}`
+    );
+  }
+});
+
 test('sold-out event cannot be booked', () => {
   const event = createEvent({ availability: 0 });
 
