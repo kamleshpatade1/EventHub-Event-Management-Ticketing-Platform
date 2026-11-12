@@ -3,7 +3,11 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { CalendarDays, MapPin, Ticket, Users, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../auth/useAuth.js';
 import { api } from '../lib/api.js';
-import { formatEventDateTime, getBookingState } from './eventDetailsUtils.js';
+import {
+  formatEventDateTime,
+  getBookingState,
+  isEventPaid,
+} from './eventDetailsUtils.js';
 
 function getBookingErrorMessage(error) {
   if (error?.status === 401 || error?.code === 'UNAUTHENTICATED') {
@@ -409,6 +413,14 @@ export default function EventDetails() {
             >
               Booking status: {bookingStateLabel}
             </p>
+
+            {isEventPaid(event) && (
+              <p className="mt-4 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm leading-6 text-purple-100">
+                Paid ticket cancellation and refunds are not supported in this
+                MVP. This is a simulated test payment. No real payment gateway
+                or charge is involved, and no real money is charged.
+              </p>
+            )}
 
             {bookingState.canBook ? (
               <button
