@@ -44,6 +44,16 @@ Ctrl+C stops the frontend and backend. PostgreSQL remains running;
 `pnpm db:down` removes the Compose containers/network but preserves its named volume.
 Do not use `down -v` unless you intentionally want to delete local database data.
 
+## Admin demo
+
+Run `pnpm db:seed` against the local demo database. Sign in as the seeded
+admin and open **Admin** from the home page. **Users** lets admins grant or
+revoke organizer access. **Events** lets admins hide or unhide an event and
+records the latest action's reason, admin, and time.
+
+Hiding an event removes it from discovery and blocks new bookings and
+first-time check-in. Existing attendees can still open their tickets.
+
 ## Root commands
 
 | Command                              | Purpose                                                           |

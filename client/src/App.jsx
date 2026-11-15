@@ -1,4 +1,5 @@
-import { Route, Routes } from 'react-router';
+import { Navigate, Route, Routes } from 'react-router';
+import Admin from './pages/Admin.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -43,7 +44,7 @@ function App() {
         path="/admin"
         element={
           <RequireAuth role="ADMIN">
-            <Placeholder name="Admin" />
+            <Navigate to="/admin/users" replace />
           </RequireAuth>
         }
       />
@@ -51,7 +52,7 @@ function App() {
         path="/admin/users"
         element={
           <RequireAuth role="ADMIN">
-            <Placeholder name="Admin users" />
+            <Admin key="users" section="users" />
           </RequireAuth>
         }
       />
@@ -59,7 +60,7 @@ function App() {
         path="/admin/events"
         element={
           <RequireAuth role="ADMIN">
-            <Placeholder name="Admin events" />
+            <Admin key="events" section="events" />
           </RequireAuth>
         }
       />

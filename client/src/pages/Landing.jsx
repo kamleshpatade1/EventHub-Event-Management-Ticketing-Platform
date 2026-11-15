@@ -327,6 +327,14 @@ const Landing = () => {
 
               {user ? (
                 <>
+                  {user.role === 'ADMIN' && (
+                    <Link
+                      to="/admin"
+                      className="rounded-lg px-2 py-2 text-sm font-semibold text-purple-200 hover:bg-purple-500/15"
+                    >
+                      Admin
+                    </Link>
+                  )}
                   <Link
                     to="/profile"
                     className="hidden text-sm text-gray-300 transition-colors hover:text-white sm:block"

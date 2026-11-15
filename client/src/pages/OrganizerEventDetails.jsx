@@ -216,6 +216,13 @@ function OrganizerEventDetails() {
           </div>
         </header>
 
+        {event.hiddenAt && (
+          <p className="mb-5 rounded-xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-200">
+            An admin hid this event. Public discovery, new bookings, and
+            first-time check-in are paused while it is hidden.
+          </p>
+        )}
+
         {message && (
           <div
             role="status"
@@ -327,7 +334,7 @@ function OrganizerEventDetails() {
           </p>
 
           <div className="flex flex-wrap gap-3">
-            {isDraft && (
+            {isDraft && !event.hiddenAt && (
               <button
                 type="button"
                 disabled={actionLoading}

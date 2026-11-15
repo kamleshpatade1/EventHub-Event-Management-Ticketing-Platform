@@ -137,6 +137,7 @@ P0 = required for the demo; P1 = only after all P0 checks pass; Later = outside 
 - Paginated user list; promote ATTENDEE to ORGANIZER and revoke ORGANIZER back to ATTENDEE. No public admin creation or arbitrary role updates.
 - Paginated event list; hide/unhide with a reason. Hiding stops new bookings and publishing visibility; it does not cancel sold tickets.
 - Existing held payments may settle after hiding because they represent prior reservations; existing buyers retain ticket access.
+- First-time check-in is blocked while an event is hidden. Check-in resumes after the event is unhidden, subject to the event's check-in window.
 - View payment exceptions for investigation. Exceptional sandbox refunds happen in the provider dashboard and are reflected through verified provider updates; do not build a general refund UI.
 - Acceptance: non-admin access is denied; hiding removes an event from search and blocks new reservations without destroying existing bookings.
 
