@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { Check, Copy, Printer, Ticket } from 'lucide-react';
 import { api } from '../lib/api.js';
 import {
   Alert,
@@ -12,6 +13,7 @@ import {
   formatEventDate,
   getEventDetails,
   primaryButtonClass,
+  secondaryButtonClass,
 } from './bookingUtils.js';
 
 function BookingTicket() {
@@ -23,6 +25,7 @@ function BookingTicket() {
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
   const [copyMessage, setCopyMessage] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -81,8 +84,6 @@ function BookingTicket() {
   function retryTicket() {
     setLoading(true);
     setError(null);
-    setTicket(null);
-    setCopyMessage('');
     setRetry((value) => value + 1);
   }
 
@@ -90,14 +91,15 @@ function BookingTicket() {
     if (!ticket?.ticketCode) return;
 
     try {
-      if (navigator.clipboard?.writeText) {
+      if (typeof navigator?.clipboard?.writeText === 'function') {
         await navigator.clipboard.writeText(ticket.ticketCode);
-        setCopyMessage('Ticket code copied successfully.');
-      } else {
-        throw new Error('Clipboard API unavailable');
+        setCopied(true);
+        setCopyMessage('Ticket code copied to clipboard.');
+        setTimeout(() => setCopied(false), 2500);
+        return;
       }
+      throw new Error('Clipboard API unavailable');
     } catch {
-      // Fallback: select the code so the user can copy it manually.
       const codeElement = document.getElementById('ticket-code');
 
       if (codeElement) {
@@ -117,7 +119,7 @@ function BookingTicket() {
 
   if (loading) {
     return (
-      <BookingPageFrame title="Your ticket">
+      <BookingPageFrame title="Your Ticket">
         <Panel>
           <LoadingState label="Checking ticket availability…" />
         </Panel>
@@ -137,10 +139,10 @@ function BookingTicket() {
 
   return (
     <BookingPageFrame
-      subtitle="Keep your ticket code ready for event check-in."
-      title="Your ticket"
+      subtitle="Keep your ticket code ready for event entrance check-in."
+      title="Your Ticket"
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         {error ? (
           <div className="space-y-4">
             {error.status === 409 ? (
@@ -164,134 +166,149 @@ function BookingTicket() {
             )}
           </div>
         ) : ticketAvailable ? (
-          <Panel className="ticket-print mx-auto max-w-2xl border-purple-500/30 bg-gradient-to-br from-gray-950 via-gray-950 to-purple-950/30">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-800 pb-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-300">
-                  EventHub admission
-                </p>
+          <div className="ticket-print mx-auto max-w-2xl overflow-hidden rounded-3xl border-2 border-[#d4c7b9] bg-white shadow-md">
+            {/* Top decorative pass header */}
+            <div className="bg-[#211c18] px-6 py-6 text-[#fff4e8] sm:px-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-[#ff9979]">
+                    <Ticket className="size-3.5" /> EventHub Admission Pass
+                  </p>
+                  <h2 className="mt-2 font-serif text-2xl font-bold tracking-tight text-[#fff4e8] sm:text-3xl">
+                    {event?.title ?? 'Event'}
+                  </h2>
+                </div>
 
-                <h2 className="mt-2 text-2xl font-bold">
-                  {event?.title ?? 'Event'}
-                </h2>
+                <span className="rounded-full bg-[#e8f5ec] px-3.5 py-1 text-xs font-semibold text-[#1b6e49] border border-[#a3d9b8]">
+                  Confirmed
+                </span>
+              </div>
+            </div>
+
+            <div className="p-6 sm:p-8">
+              <div className="border-b border-[#eadecc] pb-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                  Attendee
+                </p>
+                <p className="mt-1 font-serif text-xl font-bold text-[#211c18]">
+                  {attendeeName}
+                </p>
               </div>
 
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                Confirmed
-              </span>
-            </div>
+              <dl className="grid gap-5 py-6 sm:grid-cols-2">
+                <TicketDetail
+                  label="Date & Time"
+                  value={formatEventDate(event?.startAt, event?.timezone)}
+                />
 
-            <div className="border-b border-gray-800 py-5">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Attendee
-              </p>
+                <TicketDetail
+                  label="Ends"
+                  value={formatEventDate(event?.endAt, event?.timezone)}
+                />
 
-              <p className="mt-1 text-lg font-semibold text-white">
-                {attendeeName}
-              </p>
-            </div>
+                <TicketDetail
+                  label="Venue"
+                  value={event?.venue ?? 'Not available'}
+                />
 
-            <dl className="grid gap-5 py-5 sm:grid-cols-2">
-              <TicketDetail
-                label="Start date and time"
-                value={formatEventDate(event?.startAt, event?.timezone)}
-              />
+                <TicketDetail
+                  label="City"
+                  value={event?.city ?? 'Not available'}
+                />
 
-              <TicketDetail
-                label="End date and time"
-                value={formatEventDate(event?.endAt, event?.timezone)}
-              />
+                <TicketDetail
+                  label="Timezone"
+                  value={event?.timezone ?? 'Not available'}
+                />
 
-              <TicketDetail
-                label="Venue"
-                value={event?.venue ?? 'Not available'}
-              />
+                <TicketDetail
+                  label="Check-in status"
+                  value={
+                    booking?.checkedInAt
+                      ? `Checked in · ${formatEventDate(
+                          booking.checkedInAt,
+                          event?.timezone
+                        )}`
+                      : 'Not checked in'
+                  }
+                />
 
-              <TicketDetail
-                label="City"
-                value={event?.city ?? 'Not available'}
-              />
+                <TicketDetail label="Booking ID" value={ticket.bookingId} />
+              </dl>
 
-              <TicketDetail
-                label="Timezone"
-                value={event?.timezone ?? 'Not available'}
-              />
+              {/* Perforated tear line effect */}
+              <div className="relative my-4 flex items-center justify-between">
+                <div className="h-6 w-3 rounded-r-full bg-[#f3eee6] -ml-6 sm:-ml-8 border-y border-r border-[#d4c7b9]" />
+                <div className="w-full border-t-2 border-dashed border-[#d4c7b9]" />
+                <div className="h-6 w-3 rounded-l-full bg-[#f3eee6] -mr-6 sm:-mr-8 border-y border-l border-[#d4c7b9]" />
+              </div>
 
-              <TicketDetail
-                label="Check-in status"
-                value={
-                  booking?.checkedInAt
-                    ? `Checked in · ${formatEventDate(
-                        booking.checkedInAt,
-                        event?.timezone
-                      )}`
-                    : 'Not checked in'
-                }
-              />
-
-              <TicketDetail label="Booking ID" value={ticket.bookingId} />
-            </dl>
-
-            <div className="rounded-xl border border-purple-400/20 bg-black/40 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Ticket code
-              </p>
-
-              <p
-                id="ticket-code"
-                className="mt-2 select-all break-all font-mono text-lg font-semibold tracking-wide text-purple-200"
-              >
-                {ticketCode}
-              </p>
-
-              <button
-                className="print:hidden mt-4 inline-flex min-h-10 items-center rounded-lg border border-purple-400/40 px-4 py-2 text-sm font-semibold text-purple-200 hover:bg-purple-500/10"
-                onClick={copyTicketCode}
-                type="button"
-              >
-                Copy ticket code
-              </button>
-
-              {copyMessage && (
-                <p
-                  aria-live="polite"
-                  className="print:hidden mt-3 text-sm text-gray-300"
-                >
-                  {copyMessage}
+              <div className="rounded-2xl border-2 border-dashed border-[#9f3b27]/30 bg-[#faf7f2] p-6 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                  Admission Verification Code
                 </p>
-              )}
-            </div>
 
-            <p className="mt-5 text-xs text-gray-500">
-              Please present this ticket code at the event entrance.
-            </p>
-          </Panel>
+                <p
+                  id="ticket-code"
+                  className="mt-3 select-all break-all font-mono text-2xl font-bold tracking-widest text-[#9f3b27] sm:text-3xl"
+                >
+                  {ticketCode}
+                </p>
+
+                <div className="mt-4 flex items-center justify-center gap-3">
+                  <button
+                    className="print:hidden inline-flex items-center gap-1.5 rounded-full border border-[#d4c7b9] bg-white px-4 py-2 text-xs font-semibold text-[#211c18] transition hover:border-[#9f3b27] hover:text-[#9f3b27]"
+                    onClick={copyTicketCode}
+                    type="button"
+                  >
+                    {copied ? (
+                      <Check size={14} className="text-[#1b6e49]" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                    {copied ? 'Copied!' : 'Copy ticket code'}
+                  </button>
+                </div>
+
+                {copyMessage && (
+                  <p
+                    aria-live="polite"
+                    className="print:hidden mt-2 text-xs text-[#63564b]"
+                  >
+                    {copyMessage}
+                  </p>
+                )}
+              </div>
+
+              <p className="mt-5 text-center text-xs text-[#8c7d70]">
+                Present this code or printed pass at the venue door for
+                validation.
+              </p>
+            </div>
+          </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-3 print:hidden">
           {ticketAvailable && (
             <button
               className={primaryButtonClass}
               onClick={() => window.print()}
               type="button"
             >
-              Print ticket
+              <Printer className="mr-2 size-4" /> Print ticket
             </button>
           )}
 
           {booking && (
             <Link
-              className="inline-flex min-h-11 items-center rounded-lg border border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-200 hover:border-purple-500/60"
+              className={secondaryButtonClass}
               to={`/bookings/${encodeURIComponent(booking.id)}`}
             >
               Booking details
             </Link>
           )}
 
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg border border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-200 hover:border-purple-500/60"
-            to="/my-bookings"
-          >
+          <Link className={secondaryButtonClass} to="/my-bookings">
             My bookings
           </Link>
         </div>
@@ -303,11 +320,13 @@ function BookingTicket() {
 function TicketDetail({ label, value }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      <dt className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
         {label}
       </dt>
 
-      <dd className="mt-1 break-words text-sm text-gray-100">{value}</dd>
+      <dd className="mt-1 break-words text-sm font-medium text-[#211c18]">
+        {value}
+      </dd>
     </div>
   );
 }

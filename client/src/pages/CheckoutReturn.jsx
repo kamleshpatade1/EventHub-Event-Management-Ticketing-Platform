@@ -12,6 +12,7 @@ import {
   formatMoney,
   getEventDetails,
   primaryButtonClass,
+  secondaryButtonClass,
 } from './bookingUtils.js';
 import { StatusBadge } from './BookingUI.jsx';
 
@@ -117,15 +118,14 @@ function CheckoutReturn() {
 
   return (
     <BookingPageFrame
-      subtitle="A return from checkout does not prove payment. Status is confirmed only by the server."
-      title="Checkout status"
+      subtitle="A return from checkout does not prove payment. Status is confirmed directly by the server."
+      title="Checkout Status"
     >
       {!bookingId ? (
         <Panel>
           <Alert tone="info">
-            No booking reference was provided. This test checkout provider does
-            not define a return URL or query parameters. Open the relevant
-            booking from your bookings list to check its status.
+            No booking reference was provided. Open the relevant booking from
+            your bookings list to check its status.
           </Alert>
           <Link className={`${primaryButtonClass} mt-5`} to="/my-bookings">
             Go to my bookings
@@ -149,7 +149,7 @@ function CheckoutReturn() {
           )}
         </div>
       ) : booking ? (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {message && (
             <Alert tone={error || needsCheckoutSession ? 'info' : 'success'}>
               {message}
@@ -157,59 +157,59 @@ function CheckoutReturn() {
           )}
           {error && <ErrorMessage error={error} />}
           <Panel>
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#eadecc] pb-4">
               <div>
-                <h2 className="text-xl font-semibold">
+                <h2 className="font-serif text-2xl font-bold text-[#211c18]">
                   {event.title ?? 'Booking'}
                 </h2>
-                <p className="mt-1 break-all text-xs text-gray-500">
-                  Booking {booking.id}
+                <p className="mt-1 break-all text-xs text-[#8c7d70]">
+                  Booking ID: {booking.id}
                 </p>
               </div>
               {booking.status === 'CONFIRMED' &&
               booking.amountMinor > 0 &&
               !paymentVerified ? (
-                <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-200">
+                <span className="inline-flex items-center rounded-full border border-[#f4d19b] bg-[#fef3e2] px-3 py-1 text-xs font-semibold text-[#a36209]">
                   Verification needed
                 </span>
               ) : (
                 <StatusBadge status={booking.status} />
               )}
             </div>
-            <p className="mt-4 text-sm text-gray-300">
+            <p className="mt-4 font-serif text-xl font-bold text-[#9f3b27]">
               Amount: {formatMoney(booking.amountMinor, booking.currency)}
             </p>
             {booking.status === 'PENDING_PAYMENT' && (
-              <p className="mt-3 text-sm leading-6 text-amber-200">
-                Payment is still pending. Refresh to ask the server to reconcile
-                provider status.
+              <p className="mt-3 text-sm leading-relaxed text-[#a36209]">
+                Payment is still pending. Refresh below to reconcile provider
+                status.
               </p>
             )}
             {booking.status === 'EXPIRED' && (
-              <p className="mt-3 text-sm leading-6 text-gray-300">
+              <p className="mt-3 text-sm leading-relaxed text-[#63564b]">
                 This booking expired. No ticket is available.
               </p>
             )}
             {booking.status === 'REFUND_REQUIRED' && (
-              <p className="mt-3 text-sm leading-6 text-orange-200">
+              <p className="mt-3 text-sm leading-relaxed text-[#9f3b27]">
                 Payment requires review. No ticket has been issued.
               </p>
             )}
             {booking.status === 'CONFIRMED' && paymentVerified && (
-              <p className="mt-3 text-sm leading-6 text-emerald-200">
-                Reconciliation confirmed payment and the booking.
+              <p className="mt-3 text-sm leading-relaxed text-[#1b6e49] font-medium">
+                Reconciliation confirmed your payment and booked admission.
               </p>
             )}
             {booking.status === 'CONFIRMED' &&
               booking.amountMinor > 0 &&
               !paymentVerified && (
-                <p className="mt-3 text-sm leading-6 text-amber-200">
+                <p className="mt-3 text-sm leading-relaxed text-[#a36209]">
                   The booking is confirmed, but payment has not yet been
                   verified by reconciliation.
                 </p>
               )}
             {payment && (
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-4 text-xs text-[#8c7d70]">
                 Provider payment state: {payment.status}
               </p>
             )}
@@ -227,7 +227,7 @@ function CheckoutReturn() {
             )}
             {booking.amountMinor > 0 && needsCheckoutSession && (
               <Link
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-700 bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-100 hover:border-purple-500/60"
+                className={secondaryButtonClass}
                 to={`/bookings/${encodeURIComponent(booking.id)}`}
               >
                 Resume checkout
@@ -238,11 +238,11 @@ function CheckoutReturn() {
                 className={primaryButtonClass}
                 to={`/bookings/${encodeURIComponent(booking.id)}/ticket`}
               >
-                View ticket
+                View ticket & admission pass
               </Link>
             )}
             <Link
-              className="inline-flex min-h-11 items-center rounded-lg border border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-200 hover:border-purple-500/60"
+              className={secondaryButtonClass}
               to={`/bookings/${encodeURIComponent(booking.id)}`}
             >
               Booking details

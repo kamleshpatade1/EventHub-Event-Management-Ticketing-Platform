@@ -1,46 +1,28 @@
 import { Link } from 'react-router';
+import Navbar from '../components/Navbar.jsx';
+import Footer from '../components/Footer.jsx';
 import { statusLabel } from './bookingUtils.js';
 
 export function BookingPageFrame({ children, subtitle, title }) {
   return (
-    <div className="min-h-screen bg-[#09090b] text-white">
-      <header className="border-b border-gray-800 bg-black/80">
-        <nav
-          aria-label="Main navigation"
-          className="mx-auto flex min-h-[68px] max-w-5xl items-center justify-between gap-4 px-4 sm:px-6"
-        >
-          <Link className="text-xl font-bold tracking-tight" to="/">
-            Event<span className="text-purple-400">Hub</span>
-          </Link>
-          <div className="flex items-center gap-4 text-sm">
-            <Link
-              className="text-gray-300 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-300"
-              to="/events"
-            >
-              Browse events
-            </Link>
-            <Link
-              className="text-purple-300 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-300"
-              to="/my-bookings"
-            >
-              My bookings
-            </Link>
-          </div>
-        </nav>
-      </header>
-      <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
-        <div className="mb-7">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+    <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+      <Navbar />
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mb-8">
+          <h1 className="font-serif text-3xl font-extrabold tracking-tight text-[#211c18] sm:text-4xl">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400 sm:text-base">
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#63564b] sm:text-base">
               {subtitle}
             </p>
           )}
         </div>
         {children}
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -48,7 +30,7 @@ export function BookingPageFrame({ children, subtitle, title }) {
 export function Panel({ children, className = '' }) {
   return (
     <section
-      className={`rounded-2xl border border-gray-800 bg-gray-950/70 p-5 shadow-xl shadow-black/20 sm:p-6 ${className}`}
+      className={`rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-7 ${className}`}
     >
       {children}
     </section>
@@ -58,14 +40,14 @@ export function Panel({ children, className = '' }) {
 export function Alert({ children, tone = 'error' }) {
   const toneClass =
     tone === 'success'
-      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+      ? 'border-[#a3d9b8] bg-[#e8f5ec] text-[#1b6e49]'
       : tone === 'info'
-        ? 'border-purple-500/30 bg-purple-500/10 text-purple-100'
-        : 'border-red-500/30 bg-red-500/10 text-red-200';
+        ? 'border-[#d4c7b9] bg-[#faf7f2] text-[#63564b]'
+        : 'border-[#f4bebe] bg-[#fbebe8] text-[#9f3b27]';
 
   return (
     <div
-      className={`rounded-xl border px-4 py-3 text-sm leading-6 ${toneClass}`}
+      className={`rounded-xl border px-4 py-3 text-sm leading-relaxed ${toneClass}`}
       role={tone === 'error' ? 'alert' : 'status'}
     >
       {children}
@@ -75,7 +57,10 @@ export function Alert({ children, tone = 'error' }) {
 
 export function LoadingState({ label = 'Loading booking information…' }) {
   return (
-    <p aria-live="polite" className="py-10 text-center text-sm text-gray-400">
+    <p
+      aria-live="polite"
+      className="py-10 text-center text-sm font-medium text-[#63564b]"
+    >
       {label}
     </p>
   );
@@ -86,10 +71,7 @@ export function ErrorMessage({ error }) {
     return (
       <Alert>
         Your session has expired or you are not signed in.{' '}
-        <Link
-          className="font-semibold underline underline-offset-4"
-          to="/login"
-        >
+        <Link className="font-bold underline underline-offset-4" to="/login">
           Sign in
         </Link>{' '}
         to view your bookings.
@@ -109,13 +91,13 @@ export function ErrorMessage({ error }) {
 export function StatusBadge({ status }) {
   const className =
     {
-      PENDING_PAYMENT: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
-      CONFIRMED: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
-      CANCELLED: 'border-gray-600 bg-gray-800 text-gray-300',
-      EXPIRED: 'border-gray-600 bg-gray-800 text-gray-300',
-      REFUND_REQUIRED: 'border-orange-400/30 bg-orange-400/10 text-orange-200',
-      REFUNDED: 'border-blue-400/30 bg-blue-400/10 text-blue-200',
-    }[status] ?? 'border-gray-700 bg-gray-900 text-gray-300';
+      PENDING_PAYMENT: 'border-[#f4d19b] bg-[#fef3e2] text-[#a36209]',
+      CONFIRMED: 'border-[#a3d9b8] bg-[#e8f5ec] text-[#1b6e49]',
+      CANCELLED: 'border-[#d4c7b9] bg-[#faf7f2] text-[#63564b]',
+      EXPIRED: 'border-[#d4c7b9] bg-[#faf7f2] text-[#8c7d70]',
+      REFUND_REQUIRED: 'border-[#f4bebe] bg-[#fbebe8] text-[#9f3b27]',
+      REFUNDED: 'border-[#b8d4f4] bg-[#edf4fe] text-[#1d4ed8]',
+    }[status] ?? 'border-[#d4c7b9] bg-[#faf7f2] text-[#63564b]';
 
   return (
     <span

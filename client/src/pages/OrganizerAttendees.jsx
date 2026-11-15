@@ -10,6 +10,8 @@ import {
   TicketCheck,
   Users,
 } from 'lucide-react';
+import Navbar from '../components/Navbar.jsx';
+import Footer from '../components/Footer.jsx';
 import { api } from '../lib/api.js';
 
 function OrganizerAttendees() {
@@ -125,32 +127,36 @@ function OrganizerAttendees() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0b12] px-4 py-10 text-white sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-7xl">
+    <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+      <Navbar />
+
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
         <Link
           to={`/organizer/events/${eventId}`}
-          className="mb-6 inline-flex items-center gap-2 text-sm text-gray-400 transition hover:text-white"
+          className="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#63564b] hover:text-[#9f3b27] transition-colors"
         >
-          <ArrowLeft size={16} />
-          Back to event management
+          <ArrowLeft size={14} /> Back to event management
         </Link>
 
-        <header className="mb-8">
-          <p className="mb-2 text-sm font-medium text-purple-400">
+        <header className="mb-8 border-b border-[#d4c7b9] pb-6">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[#9f3b27]">
             ORGANIZER WORKSPACE
           </p>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Attendees and check-in
+          <h1 className="font-serif text-3xl font-extrabold tracking-tight text-[#211c18] sm:text-4xl">
+            Attendees & Check-in
           </h1>
-          <p className="mt-2 text-gray-400">
-            Find confirmed attendees and validate tickets at your event.
+          <p className="mt-1 text-sm text-[#63564b]">
+            Validate guest tickets at the door and review confirmed bookings.
           </p>
         </header>
 
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <TicketCheck className="text-purple-400" size={22} />
-            <h2 className="text-lg font-semibold">Check in a ticket</h2>
+        {/* Check-in input box */}
+        <section className="mb-8 rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-7">
+          <div className="mb-4 flex items-center gap-2.5">
+            <TicketCheck className="text-[#9f3b27]" size={22} />
+            <h2 className="font-serif text-xl font-bold text-[#211c18]">
+              Check in a ticket
+            </h2>
           </div>
 
           <form
@@ -165,30 +171,30 @@ function OrganizerAttendees() {
               name="ticketCode"
               value={ticketCode}
               onChange={(e) => setTicketCode(e.target.value)}
-              placeholder="Enter ticket code"
+              placeholder="Enter ticket admission code"
               autoComplete="off"
-              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition placeholder:text-gray-500 focus:border-purple-500"
+              className="min-w-0 flex-1 rounded-xl border border-[#d4c7b9] bg-white px-4 py-2.5 font-mono text-sm text-[#211c18] outline-none placeholder:font-sans placeholder:text-[#8c7d70] focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27] transition-colors"
             />
             <button
               type="submit"
               disabled={checkingIn}
-              className="rounded-xl bg-purple-600 px-5 py-3 font-semibold transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full bg-[#9f3b27] px-6 py-2.5 text-sm font-semibold text-[#fff4e8] transition hover:bg-[#852f1e] disabled:cursor-not-allowed disabled:opacity-50 shadow-xs"
             >
-              {checkingIn ? 'Checking in...' : 'Check in'}
+              {checkingIn ? 'Checking in...' : 'Validate & Check In'}
             </button>
           </form>
-          <p className="mt-3 text-xs text-gray-500">
-            Check-in is accepted only during the event's permitted check-in
-            window and for eligible confirmed tickets.
+          <p className="mt-3 text-xs text-[#8c7d70]">
+            Check-in is verified against real ticket codes during the permitted
+            event entrance window.
           </p>
         </section>
 
         {notice && (
           <div
             role="status"
-            className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300"
+            className="mb-6 flex items-center gap-2 rounded-2xl border border-[#a3d9b8] bg-[#e8f5ec] p-4 text-xs font-semibold text-[#1b6e49]"
           >
-            <CheckCircle2 size={18} />
+            <CheckCircle2 size={16} />
             {notice}
           </div>
         )}
@@ -196,29 +202,29 @@ function OrganizerAttendees() {
         {error && (
           <div
             role="alert"
-            className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-300"
+            className="mb-6 rounded-2xl border border-[#f4bebe] bg-[#fbebe8] p-4 text-xs font-semibold text-[#9f3b27]"
           >
             <p>{error}</p>
             <button
               type="button"
               onClick={reloadAttendees}
-              className="mt-2 font-semibold underline"
+              className="mt-2 font-bold underline"
             >
               Reload attendees
             </button>
           </div>
         )}
 
-        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <section className="rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-7">
+          <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center border-b border-[#eadecc] pb-4">
             <div>
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <Users size={21} className="text-purple-400" />
+              <h2 className="flex items-center gap-2 font-serif text-xl font-bold text-[#211c18]">
+                <Users size={20} className="text-[#9f3b27]" />
                 Confirmed attendees
               </h2>
-              <p className="mt-1 text-sm text-gray-400">
+              <p className="mt-0.5 text-xs text-[#63564b]">
                 {pagination.total} attendee
-                {pagination.total === 1 ? '' : 's'} found
+                {pagination.total === 1 ? '' : 's'} total
               </p>
             </div>
 
@@ -226,9 +232,9 @@ function OrganizerAttendees() {
               type="button"
               disabled={loading || checkingIn}
               onClick={reloadAttendees}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:bg-white/5 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[#d4c7b9] bg-white px-4 py-1.5 text-xs font-semibold text-[#211c18] transition hover:bg-[#faf7f2] disabled:opacity-50"
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Refresh
             </button>
           </div>
@@ -242,8 +248,8 @@ function OrganizerAttendees() {
             </label>
             <div className="relative min-w-0 flex-1">
               <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8c7d70]"
               />
               <input
                 id="attendeeSearch"
@@ -251,7 +257,7 @@ function OrganizerAttendees() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 maxLength={100}
                 placeholder="Search by attendee name or booking ID"
-                className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-4 text-white outline-none transition placeholder:text-gray-500 focus:border-purple-500"
+                className="w-full rounded-xl border border-[#d4c7b9] bg-white py-2.5 pl-10 pr-4 text-sm text-[#211c18] outline-none placeholder:text-[#8c7d70] focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27] transition-colors"
               />
             </div>
             <label htmlFor="attendeeCheckInStatus" className="sr-only">
@@ -261,7 +267,7 @@ function OrganizerAttendees() {
               id="attendeeCheckInStatus"
               value={statusInput}
               onChange={(event) => setStatusInput(event.target.value)}
-              className="rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-white focus:border-purple-500"
+              className="rounded-xl border border-[#d4c7b9] bg-white px-4 py-2.5 text-sm font-medium text-[#211c18] outline-none focus:border-[#9f3b27]"
             >
               <option value="">All check-in statuses</option>
               <option value="true">Checked in</option>
@@ -270,55 +276,57 @@ function OrganizerAttendees() {
             <button
               type="submit"
               disabled={loading || checkingIn}
-              className="rounded-xl border border-white/15 px-5 py-3 font-medium transition hover:bg-white/10 disabled:opacity-50"
+              className="rounded-full border border-[#d4c7b9] bg-white px-5 py-2.5 text-xs font-semibold text-[#211c18] transition hover:bg-[#faf7f2] hover:border-[#9f3b27] disabled:opacity-50"
             >
               Apply filters
             </button>
           </form>
 
           {loading ? (
-            <div className="py-12 text-center text-gray-400">
+            <div className="py-12 text-center text-sm font-medium text-[#63564b]">
               Loading attendees...
             </div>
           ) : current.error ? null : attendees.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/15 px-5 py-12 text-center">
-              <Users size={36} className="mx-auto mb-3 text-gray-500" />
-              <h3 className="font-semibold">No attendees found</h3>
-              <p className="mt-2 text-sm text-gray-400">
-                No confirmed bookings match these filters.
+            <div className="rounded-2xl border border-dashed border-[#d4c7b9] px-5 py-12 text-center">
+              <Users size={32} className="mx-auto mb-2 text-[#8c7d70]" />
+              <h3 className="font-serif text-lg font-bold text-[#211c18]">
+                No attendees found
+              </h3>
+              <p className="mt-1 text-xs text-[#63564b]">
+                No confirmed bookings match these search filters.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-gray-400">
-                    <th className="px-3 py-3 font-medium">Attendee</th>
-                    <th className="px-3 py-3 font-medium">Booking ID</th>
-                    <th className="px-3 py-3 font-medium">Check-in status</th>
-                    <th className="px-3 py-3 font-medium">Action</th>
+                  <tr className="border-b border-[#eadecc] text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                    <th className="px-3 py-3">Attendee</th>
+                    <th className="px-3 py-3">Booking ID</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">Action</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-[#eadecc]">
                   {attendees.map((attendee) => (
                     <tr
                       key={attendee.bookingId}
-                      className="border-b border-white/5 last:border-0"
+                      className="transition-colors hover:bg-[#faf7f2]"
                     >
-                      <td className="px-3 py-4 font-medium">
+                      <td className="px-3 py-4 font-medium text-[#211c18]">
                         {attendee.name || 'Unnamed attendee'}
                       </td>
-                      <td className="px-3 py-4 font-mono text-xs text-gray-300">
+                      <td className="px-3 py-4 font-mono text-xs text-[#63564b]">
                         {attendee.bookingId}
                       </td>
                       <td className="px-3 py-4">
                         {attendee.checkedInAt ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
-                            <CheckCircle2 size={14} />
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#a3d9b8] bg-[#e8f5ec] px-3 py-0.5 text-xs font-semibold text-[#1b6e49]">
+                            <CheckCircle2 size={13} />
                             Checked in
                           </span>
                         ) : (
-                          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-gray-300">
+                          <span className="rounded-full border border-[#d4c7b9] bg-[#faf7f2] px-3 py-0.5 text-xs font-semibold text-[#63564b]">
                             Not checked in
                           </span>
                         )}
@@ -332,7 +340,7 @@ function OrganizerAttendees() {
                             onClick={() =>
                               checkIn({ bookingId: attendee.bookingId })
                             }
-                            className="min-h-10 whitespace-nowrap rounded-lg border border-purple-400/40 px-3 text-sm font-semibold text-purple-200 hover:bg-purple-500/15 focus-visible:outline-2 focus-visible:outline-purple-400 disabled:opacity-50"
+                            className="whitespace-nowrap rounded-full border border-[#d4c7b9] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#211c18] transition hover:border-[#9f3b27] hover:text-[#9f3b27] disabled:opacity-50"
                           >
                             Check in
                           </button>
@@ -350,19 +358,19 @@ function OrganizerAttendees() {
             (totalPages > 1 || pagination.page > 1) && (
               <nav
                 aria-label="Attendee pages"
-                className="mt-6 flex items-center justify-between gap-4"
+                className="mt-6 flex items-center justify-between gap-4 border-t border-[#eadecc] pt-4"
               >
                 <button
                   type="button"
                   disabled={checkingIn || pagination.page <= 1}
                   onClick={() => goToPage(pagination.page - 1)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#d4c7b9] bg-white px-4 py-1.5 text-xs font-semibold text-[#211c18] transition hover:bg-[#faf7f2] disabled:opacity-40"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={14} />
                   Previous
                 </button>
 
-                <span className="text-sm text-gray-400">
+                <span className="text-xs font-medium text-[#63564b]">
                   Page {pagination.page} of {totalPages}
                 </span>
 
@@ -370,16 +378,18 @@ function OrganizerAttendees() {
                   type="button"
                   disabled={checkingIn || pagination.page >= totalPages}
                   onClick={() => goToPage(pagination.page + 1)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#d4c7b9] bg-white px-4 py-1.5 text-xs font-semibold text-[#211c18] transition hover:bg-[#faf7f2] disabled:opacity-40"
                 >
                   Next
-                  <ChevronRight size={16} />
+                  <ChevronRight size={14} />
                 </button>
               </nav>
             )}
         </section>
-      </div>
-    </main>
+      </main>
+
+      <Footer />
+    </div>
   );
 }
 

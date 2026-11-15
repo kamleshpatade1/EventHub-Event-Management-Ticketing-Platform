@@ -5,7 +5,7 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../auth/useAuth.js';
 
 const inputClassName =
-  'h-10 w-full rounded-lg border border-[#3A3348] bg-[#14141B] px-4 text-sm text-white outline-none transition-colors duration-200 placeholder:text-[#71717A] hover:border-[#5A4D70] focus-visible:border-[#8B5CF6] focus-visible:ring-2 focus-visible:ring-[#8B5CF6]/30 aria-invalid:border-[#F87171] aria-invalid:focus-visible:border-[#F87171] aria-invalid:focus-visible:ring-[#F87171]/20';
+  'h-11 w-full rounded-xl border border-[#d4c7b9] bg-white px-3.5 text-sm text-[#211c18] outline-none placeholder:text-[#8c7d70] focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27] transition-colors aria-invalid:border-[#f4bebe] aria-invalid:focus:border-[#9f3b27]';
 
 function validateForm(values) {
   const nextErrors = {};
@@ -104,7 +104,6 @@ function Signup() {
         },
       });
 
-      // Support either { data: user } or a directly returned user object.
       const user = result?.data ?? result;
 
       setUser(user);
@@ -144,22 +143,22 @@ function Signup() {
     <AuthLayout
       footer={
         <>
-          Already Have An Account?{' '}
+          Already have an account?{' '}
           <Link
-            className="font-semibold text-[#A78BFA] underline-offset-4 hover:text-white hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A78BFA]"
+            className="font-semibold text-[#9f3b27] hover:underline"
             to="/login"
           >
-            Log In.
+            Log in.
           </Link>
         </>
       }
       subtitle="Enter your details to create your EventHub account."
       title="Create Account"
     >
-      <form className="space-y-2.5" noValidate onSubmit={handleSubmit}>
+      <form className="space-y-3" noValidate onSubmit={handleSubmit}>
         <div className="space-y-1">
           <label
-            className="block text-sm font-medium text-[#E4E4E7]"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
             htmlFor="signup-name"
           >
             Full Name
@@ -173,13 +172,13 @@ function Signup() {
             id="signup-name"
             name="fullName"
             onChange={handleChange}
-            placeholder="Enter your full name"
+            placeholder="e.g. Priya Sharma"
             type="text"
             value={formValues.fullName}
           />
 
           {errors.fullName && (
-            <p className="text-xs text-[#F87171]" id="signup-name-error">
+            <p className="text-xs text-[#9f3b27]" id="signup-name-error">
               {errors.fullName}
             </p>
           )}
@@ -187,7 +186,7 @@ function Signup() {
 
         <div className="space-y-1">
           <label
-            className="block text-sm font-medium text-[#E4E4E7]"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
             htmlFor="signup-email"
           >
             Email
@@ -207,7 +206,7 @@ function Signup() {
           />
 
           {errors.email && (
-            <p className="text-xs text-[#F87171]" id="signup-email-error">
+            <p className="text-xs text-[#9f3b27]" id="signup-email-error">
               {errors.email}
             </p>
           )}
@@ -215,7 +214,7 @@ function Signup() {
 
         <div className="space-y-1">
           <label
-            className="block text-sm font-medium text-[#E4E4E7]"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
             htmlFor="signup-password"
           >
             Password
@@ -228,7 +227,7 @@ function Signup() {
                 errors.password ? 'signup-password-error' : undefined
               }
               aria-invalid={Boolean(errors.password)}
-              className={`${inputClassName} pr-12`}
+              className={`${inputClassName} pr-11`}
               id="signup-password"
               name="password"
               onChange={handleChange}
@@ -240,7 +239,7 @@ function Signup() {
             <button
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
-              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-[#A1A1AA] transition-colors hover:text-[#A78BFA] focus-visible:rounded-r-lg focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#A78BFA]"
+              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-[#8c7d70] hover:text-[#211c18]"
               onClick={() => setShowPassword((visible) => !visible)}
               type="button"
             >
@@ -249,7 +248,7 @@ function Signup() {
           </div>
 
           {errors.password && (
-            <p className="text-xs text-[#F87171]" id="signup-password-error">
+            <p className="text-xs text-[#9f3b27]" id="signup-password-error">
               {errors.password}
             </p>
           )}
@@ -257,7 +256,7 @@ function Signup() {
 
         <div className="space-y-1">
           <label
-            className="block text-sm font-medium text-[#E4E4E7]"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
             htmlFor="signup-confirm-password"
           >
             Confirm Password
@@ -272,7 +271,7 @@ function Signup() {
                   : undefined
               }
               aria-invalid={Boolean(errors.confirmPassword)}
-              className={`${inputClassName} pr-12`}
+              className={`${inputClassName} pr-11`}
               id="signup-confirm-password"
               name="confirmPassword"
               onChange={handleChange}
@@ -286,7 +285,7 @@ function Signup() {
                 showConfirmPassword ? 'Hide password' : 'Show password'
               }
               aria-pressed={showConfirmPassword}
-              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-[#A1A1AA] transition-colors hover:text-[#A78BFA] focus-visible:rounded-r-lg focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#A78BFA]"
+              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-[#8c7d70] hover:text-[#211c18]"
               onClick={() => setShowConfirmPassword((visible) => !visible)}
               type="button"
             >
@@ -296,7 +295,7 @@ function Signup() {
 
           {errors.confirmPassword && (
             <p
-              className="text-xs text-[#F87171]"
+              className="text-xs text-[#9f3b27]"
               id="signup-confirm-password-error"
             >
               {errors.confirmPassword}
@@ -304,9 +303,9 @@ function Signup() {
           )}
         </div>
 
-        <div className="space-y-1 pt-0.5">
+        <div className="space-y-1 pt-1">
           <label
-            className="flex cursor-pointer items-start gap-2.5 text-xs leading-5 text-[#A1A1AA]"
+            className="flex cursor-pointer items-start gap-2.5 text-xs leading-5 text-[#63564b]"
             htmlFor="signup-terms"
           >
             <input
@@ -315,7 +314,7 @@ function Signup() {
               }
               aria-invalid={Boolean(errors.acceptTerms)}
               checked={formValues.acceptTerms}
-              className="mt-1 size-4 shrink-0 cursor-pointer accent-[#8B5CF6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A78BFA]"
+              className="mt-1 size-4 shrink-0 cursor-pointer accent-[#9f3b27]"
               id="signup-terms"
               name="acceptTerms"
               onChange={handleChange}
@@ -325,14 +324,14 @@ function Signup() {
             <span>
               I agree to the{' '}
               <a
-                className="font-medium text-[#A78BFA] underline-offset-2 hover:text-white hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A78BFA]"
+                className="font-medium text-[#9f3b27] underline-offset-2 hover:underline"
                 href="#terms-of-service"
               >
                 Terms of Service
               </a>{' '}
               and{' '}
               <a
-                className="font-medium text-[#A78BFA] underline-offset-2 hover:text-white hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A78BFA]"
+                className="font-medium text-[#9f3b27] underline-offset-2 hover:underline"
                 href="#privacy-policy"
               >
                 Privacy Policy
@@ -342,27 +341,24 @@ function Signup() {
           </label>
 
           {errors.acceptTerms && (
-            <p
-              className="pl-[26px] text-xs text-[#F87171]"
-              id="signup-terms-error"
-            >
+            <p className="pl-6 text-xs text-[#9f3b27]" id="signup-terms-error">
               {errors.acceptTerms}
             </p>
           )}
         </div>
 
         <button
-          className="flex h-11 w-full items-center justify-center rounded-lg border border-[#A78BFA]/30 bg-[#8B5CF6] text-sm font-semibold text-white shadow-[0_6px_22px_rgba(139,92,246,0.18)] transition-all duration-200 hover:border-[#C4B5FD]/60 hover:bg-[#7C3AED] hover:shadow-[0_8px_24px_rgba(139,92,246,0.28)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#A78BFA] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 flex h-11 w-full items-center justify-center rounded-full bg-[#9f3b27] text-sm font-semibold text-[#fff4e8] shadow-xs transition hover:bg-[#852f1e] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isSubmitting}
           type="submit"
         >
-          {isSubmitting ? 'Creating Account...' : 'Create Account'}
+          {isSubmitting ? 'Creating account...' : 'Create account'}
         </button>
 
         {statusMessage && (
           <p
             aria-live="polite"
-            className="text-center text-xs leading-5 text-[#F87171]"
+            className="rounded-lg border border-[#f4bebe] bg-[#fbebe8] p-2.5 text-center text-xs text-[#9f3b27]"
             role="alert"
           >
             {statusMessage}

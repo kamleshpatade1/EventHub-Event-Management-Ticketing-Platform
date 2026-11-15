@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useSearchParams } from 'react-router';
+import { ArrowLeft, Shield } from 'lucide-react';
+import Navbar from '../components/Navbar.jsx';
+import Footer from '../components/Footer.jsx';
 import { api } from '../lib/api.js';
 
 const inputClass =
-  'min-h-11 rounded-lg border border-gray-700 bg-gray-950 px-3 text-gray-100 focus-visible:outline-2 focus-visible:outline-purple-400';
+  'min-h-11 rounded-xl border border-[#d4c7b9] bg-white px-3.5 text-sm text-[#211c18] outline-none focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27] transition-colors';
 const buttonClass =
-  'inline-flex min-h-11 items-center justify-center rounded-lg border border-purple-400/40 px-4 py-2 text-sm font-semibold text-purple-100 hover:bg-purple-500/15 focus-visible:outline-2 focus-visible:outline-purple-400 disabled:opacity-50';
+  'inline-flex min-h-11 items-center justify-center rounded-full border border-[#d4c7b9] bg-white px-5 py-2 text-xs font-semibold text-[#211c18] hover:border-[#9f3b27] hover:text-[#9f3b27] transition hover:bg-[#faf7f2] disabled:opacity-50';
+const primaryActionClass =
+  'inline-flex min-h-11 items-center justify-center rounded-full bg-[#9f3b27] px-5 py-2 text-xs font-semibold text-[#fff4e8] transition hover:bg-[#852f1e] disabled:opacity-50 shadow-xs';
+
 const labels = {
   ATTENDEE: 'Attendee',
   ORGANIZER: 'Organizer',
@@ -14,6 +20,7 @@ const labels = {
   PUBLISHED: 'Published',
   CANCELLED: 'Cancelled',
 };
+
 const formatDateTime = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -108,108 +115,145 @@ export default function Admin({ section }) {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0b12] px-4 py-8 text-white sm:px-6">
-      <div className="mx-auto max-w-5xl">
-        <Link to="/" className="text-sm text-gray-300 hover:underline">
-          Back to home
+    <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+      <Navbar />
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#63564b] hover:text-[#9f3b27] transition-colors"
+        >
+          <ArrowLeft size={14} /> Back to home
         </Link>
-        <h1 className="mt-4 text-3xl font-bold">Admin</h1>
+
+        <div className="mt-4 mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5e9e2] text-[#9f3b27]">
+            <Shield size={20} />
+          </div>
+          <div>
+            <h1 className="font-serif text-3xl font-extrabold tracking-tight text-[#211c18]">
+              Admin Workspace
+            </h1>
+            <p className="text-xs text-[#63564b]">
+              Manage user permissions and moderate public event listings.
+            </p>
+          </div>
+        </div>
+
         <nav
           aria-label="Admin"
-          className="mb-6 mt-4 flex gap-3 border-b border-white/10"
+          className="mb-8 flex gap-3 border-b border-[#d4c7b9]"
         >
           {['users', 'events'].map((item) => (
             <NavLink
               key={item}
               to={`/admin/${item}`}
               className={({ isActive }) =>
-                `border-b-2 px-3 py-3 text-sm font-semibold ${isActive ? 'border-purple-400 text-white' : 'border-transparent text-gray-300 hover:text-white'}`
+                `border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                  isActive
+                    ? 'border-[#9f3b27] text-[#9f3b27]'
+                    : 'border-transparent text-[#63564b] hover:text-[#211c18]'
+                }`
               }
             >
-              {item === 'users' ? 'Users' : 'Events'}
+              {item === 'users' ? 'User Roles' : 'Event Moderation'}
             </NavLink>
           ))}
         </nav>
 
-        <h2 className="mb-4 text-xl font-semibold">
-          {users ? 'User roles' : 'Event moderation'}
-        </h2>
-        <form
-          key={query}
-          onSubmit={applyFilters}
-          className="mb-5 flex flex-wrap items-end gap-3"
-        >
-          <label className="grid min-w-48 flex-1 gap-1 text-sm text-gray-300">
-            Search {section}
-            <input
-              className={inputClass}
-              name="q"
-              type="search"
-              maxLength={100}
-              defaultValue={params.get('q') ?? ''}
-              placeholder={users ? 'Name or email' : 'Event title'}
-            />
-          </label>
-          <label className="grid gap-1 text-sm text-gray-300">
-            {users ? 'Role' : 'Status'}
-            <select
-              className={inputClass}
-              name={users ? 'role' : 'status'}
-              defaultValue={params.get(users ? 'role' : 'status') ?? ''}
-            >
-              <option value="">All</option>
-              {(users
-                ? ['ATTENDEE', 'ORGANIZER', 'ADMIN']
-                : ['DRAFT', 'PUBLISHED', 'CANCELLED']
-              ).map((value) => (
-                <option key={value} value={value}>
-                  {labels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!users && (
-            <label className="grid gap-1 text-sm text-gray-300">
-              Visibility
+        <div className="rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-7 mb-8">
+          <h2 className="mb-4 font-serif text-xl font-bold text-[#211c18]">
+            {users ? 'User roles & permissions' : 'Event listings moderation'}
+          </h2>
+
+          <form
+            key={query}
+            onSubmit={applyFilters}
+            className="flex flex-wrap items-end gap-3"
+          >
+            <label className="grid min-w-48 flex-1 gap-1 text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+              Search {section}
+              <input
+                className={inputClass}
+                name="q"
+                type="search"
+                maxLength={100}
+                defaultValue={params.get('q') ?? ''}
+                placeholder={users ? 'Name or email' : 'Event title'}
+              />
+            </label>
+
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+              {users ? 'Role' : 'Status'}
               <select
                 className={inputClass}
-                name="hidden"
-                defaultValue={params.get('hidden') ?? ''}
+                name={users ? 'role' : 'status'}
+                defaultValue={params.get(users ? 'role' : 'status') ?? ''}
               >
                 <option value="">All</option>
-                <option value="false">Visible</option>
-                <option value="true">Hidden</option>
+                {(users
+                  ? ['ATTENDEE', 'ORGANIZER', 'ADMIN']
+                  : ['DRAFT', 'PUBLISHED', 'CANCELLED']
+                ).map((value) => (
+                  <option key={value} value={value}>
+                    {labels[value]}
+                  </option>
+                ))}
               </select>
             </label>
-          )}
-          <button className={buttonClass} disabled={busy}>
-            Apply filters
-          </button>
-        </form>
+
+            {!users && (
+              <label className="grid gap-1 text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                Visibility
+                <select
+                  className={inputClass}
+                  name="hidden"
+                  defaultValue={params.get('hidden') ?? ''}
+                >
+                  <option value="">All</option>
+                  <option value="false">Visible</option>
+                  <option value="true">Hidden</option>
+                </select>
+              </label>
+            )}
+
+            <button className={primaryActionClass} disabled={busy}>
+              Apply filters
+            </button>
+          </form>
+        </div>
 
         {notice && (
-          <p role="status" className="mb-4 text-sm text-emerald-300">
+          <p
+            role="status"
+            className="mb-6 rounded-2xl border border-[#a3d9b8] bg-[#e8f5ec] p-4 text-xs font-semibold text-[#1b6e49]"
+          >
             {notice}
           </p>
         )}
+
         {actionError && (
-          <p role="alert" className="mb-4 text-sm text-red-300">
+          <p
+            role="alert"
+            className="mb-6 rounded-2xl border border-[#f4bebe] bg-[#fbebe8] p-4 text-xs font-semibold text-[#9f3b27]"
+          >
             {actionError}
           </p>
         )}
+
         {moderating && (
           <form
             onSubmit={updateVisibility}
-            className="mb-5 rounded-xl border border-white/15 bg-gray-900 p-4"
+            className="mb-8 rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs"
           >
-            <h3 className="mb-3 font-semibold">
+            <h3 className="mb-3 font-serif text-lg font-bold text-[#211c18]">
               {moderating.hiddenAt ? 'Unhide' : 'Hide'} {moderating.title}
             </h3>
-            <label className="grid gap-1 text-sm text-gray-300">
+            <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#63564b]">
               Moderation reason
               <textarea
                 ref={reasonInput}
-                className={`${inputClass} py-2`}
+                className="w-full rounded-xl border border-[#d4c7b9] bg-[#faf7f2] p-3 text-sm text-[#211c18] outline-none focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27]"
                 name="reason"
                 required
                 maxLength={500}
@@ -217,8 +261,8 @@ export default function Admin({ section }) {
                 disabled={busy}
               />
             </label>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className={buttonClass} disabled={busy}>
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              <button className={primaryActionClass} disabled={busy}>
                 {moderating.hiddenAt ? 'Unhide event' : 'Hide event'}
               </button>
               <button
@@ -237,13 +281,17 @@ export default function Admin({ section }) {
         )}
 
         {!current && (
-          <p role="status" className="text-sm text-gray-300">
+          <p
+            role="status"
+            className="py-8 text-center text-sm font-medium text-[#63564b]"
+          >
             Loading {section}…
           </p>
         )}
+
         {current?.error && (
-          <div className="flex flex-wrap items-center gap-3">
-            <p role="alert" className="text-sm text-red-300">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#f4bebe] bg-[#fbebe8] p-4">
+            <p role="alert" className="text-xs font-semibold text-[#9f3b27]">
               {current.error}
             </p>
             <button
@@ -254,35 +302,39 @@ export default function Admin({ section }) {
             </button>
           </div>
         )}
+
         {result?.data.length === 0 && (
-          <p className="rounded-xl border border-white/10 p-5 text-gray-300">
+          <div className="rounded-2xl border border-dashed border-[#d4c7b9] bg-white p-8 text-center text-sm text-[#63564b]">
             No {section} found.
-          </p>
+          </div>
         )}
+
         {result?.data.length > 0 && (
           <ul
             aria-label={users ? 'Users' : 'Events'}
-            className="divide-y divide-white/10 rounded-xl border border-white/10 bg-gray-900/70"
+            className="divide-y divide-[#eadecc] rounded-2xl border border-[#d4c7b9] bg-white shadow-xs"
           >
             {result.data.map((row) => (
               <li
                 key={row.id}
-                className="flex flex-wrap items-start justify-between gap-4 px-4 py-4"
+                className="flex flex-wrap items-start justify-between gap-4 p-5 transition hover:bg-[#faf7f2]"
               >
                 <div className="min-w-0 flex-1 basis-48 break-words">
-                  <h3 className="font-semibold">
+                  <h3 className="font-serif text-lg font-bold text-[#211c18]">
                     {users ? row.name : row.title}
                   </h3>
-                  <p className="mt-1 text-sm text-gray-300">
+                  <p className="mt-1 text-xs text-[#63564b]">
                     {users
                       ? row.email
                       : `${row.organizer.name} · ${row.city} · ${formatDateTime.format(new Date(row.startAt))}`}
                   </p>
                   {!users && row.moderationReason && (
-                    <div className="mt-2 text-sm text-gray-300">
-                      <p>Moderation reason: {row.moderationReason}</p>
+                    <div className="mt-2 rounded-lg border border-[#eadecc] bg-[#faf7f2] p-2.5 text-xs text-[#63564b]">
+                      <p className="font-semibold text-[#211c18]">
+                        Reason: {row.moderationReason}
+                      </p>
                       {row.moderatedAt && (
-                        <p>
+                        <p className="mt-0.5 text-[11px] text-[#8c7d70]">
                           {formatDateTime.format(new Date(row.moderatedAt))}
                           {row.moderatedBy ? ` · ${row.moderatedBy.name}` : ''}
                         </p>
@@ -291,7 +343,7 @@ export default function Admin({ section }) {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm text-gray-300">
+                  <span className="rounded-full bg-[#f5e9e2] px-3 py-1 text-xs font-semibold text-[#9f3b27]">
                     {users
                       ? labels[row.role]
                       : `${labels[row.status]} · ${row.hiddenAt ? 'Hidden' : 'Visible'}`}
@@ -333,10 +385,11 @@ export default function Admin({ section }) {
             ))}
           </ul>
         )}
+
         {result && (totalPages > 1 || page > 1) && (
           <nav
             aria-label="Pagination"
-            className="mt-4 flex flex-wrap items-center gap-3"
+            className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#d4c7b9] pt-4"
           >
             <button
               className={buttonClass}
@@ -345,7 +398,7 @@ export default function Admin({ section }) {
             >
               Previous
             </button>
-            <span className="text-sm text-gray-300">
+            <span className="text-xs font-medium text-[#63564b]">
               Page {page} of {totalPages}
             </span>
             <button
@@ -357,7 +410,9 @@ export default function Admin({ section }) {
             </button>
           </nav>
         )}
-      </div>
-    </main>
+      </main>
+
+      <Footer />
+    </div>
   );
 }

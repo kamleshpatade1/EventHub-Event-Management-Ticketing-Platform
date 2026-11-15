@@ -59,31 +59,34 @@ function BookingDetails() {
                 reconciliation.data.payment.status === 'PAID'
             );
           } catch {
-            if (active) {
-              setVerificationMessage(
-                'Payment must be verified by the server before the ticket is available.'
-              );
-            }
+            if (!active) return;
+            setPaymentVerified(false);
+            setVerificationMessage(
+              'Payment could not be verified automatically. You can refresh below.'
+            );
           }
         } else {
           setPaymentVerified(false);
+          setVerificationMessage('');
         }
       } catch (requestError) {
-        if (active) setError(requestError);
+        if (!active) return;
+        setError(requestError);
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
-    loadBooking();
 
+    loadBooking();
     return () => {
       active = false;
     };
   }, [bookingId, retry]);
 
-  async function runAction(action, callback) {
-    if (busyAction) return;
-    setBusyAction(action);
+  async function runAction(actionName, callback) {
+    setBusyAction(actionName);
     setActionError(null);
     setNotice(null);
     try {
@@ -153,7 +156,7 @@ function BookingDetails() {
 
   if (loading) {
     return (
-      <BookingPageFrame title="Booking details">
+      <BookingPageFrame title="Booking Details">
         <Panel>
           <LoadingState />
         </Panel>
@@ -163,7 +166,7 @@ function BookingDetails() {
 
   if (error) {
     return (
-      <BookingPageFrame title="Booking details">
+      <BookingPageFrame title="Booking Details">
         <div className="space-y-4">
           <ErrorMessage error={error} />
           {error.status !== 401 && error.status !== 404 && (
@@ -176,10 +179,10 @@ function BookingDetails() {
             </button>
           )}
           <Link
-            className="block text-sm text-purple-300 underline underline-offset-4"
+            className="block text-xs font-semibold text-[#9f3b27] underline"
             to="/my-bookings"
           >
-            Back to my bookings
+            ← Back to my bookings
           </Link>
         </div>
       </BookingPageFrame>
@@ -196,23 +199,25 @@ function BookingDetails() {
 
   return (
     <BookingPageFrame
-      subtitle="Booking details and available actions."
-      title={event.title ?? 'Booking details'}
+      subtitle="Booking confirmation and admission details."
+      title={event.title ?? 'Booking Details'}
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         {notice && <Alert tone="success">{notice}</Alert>}
         {actionError?.code === 'CHECKOUT_NOT_CREATED' ? (
           <Alert tone="info">
             No checkout session exists yet. Resume checkout to create or reuse
             your test session, then refresh payment status.
-            <button
-              className={`${primaryButtonClass} mt-3`}
-              disabled={Boolean(busyAction)}
-              onClick={resumeCheckout}
-              type="button"
-            >
-              Resume checkout
-            </button>
+            <div className="mt-3">
+              <button
+                className={primaryButtonClass}
+                disabled={Boolean(busyAction)}
+                onClick={resumeCheckout}
+                type="button"
+              >
+                Resume checkout
+              </button>
+            </div>
           </Alert>
         ) : (
           actionError && <ErrorMessage error={actionError} />
@@ -220,22 +225,28 @@ function BookingDetails() {
         {verificationMessage && (
           <Alert tone="info">
             {verificationMessage}
-            <button
-              className={`${primaryButtonClass} mt-3`}
-              disabled={Boolean(busyAction)}
-              onClick={refreshPaymentStatus}
-              type="button"
-            >
-              {busyAction === 'refresh' ? 'Checking…' : 'Verify payment status'}
-            </button>
+            <div className="mt-3">
+              <button
+                className={primaryButtonClass}
+                disabled={Boolean(busyAction)}
+                onClick={refreshPaymentStatus}
+                type="button"
+              >
+                {busyAction === 'refresh'
+                  ? 'Checking…'
+                  : 'Verify payment status'}
+              </button>
+            </div>
           </Alert>
         )}
         <Panel>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">Booking summary</h2>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#eadecc] pb-4">
+            <h2 className="font-serif text-xl font-bold text-[#211c18]">
+              Booking summary
+            </h2>
             <StatusBadge status={booking.status} />
           </div>
-          <dl className="mt-6 grid gap-5 sm:grid-cols-2">
+          <dl className="mt-6 grid gap-6 sm:grid-cols-2">
             <Detail label="Booking ID" value={booking.id} />
             <Detail
               label="Amount"
@@ -259,33 +270,34 @@ function BookingDetails() {
 
         {isPendingPaid && (
           <Panel>
-            <h2 className="text-lg font-semibold">Payment actions</h2>
-            <p className="mt-2 text-sm leading-6 text-gray-400">
-              Your reservation is pending payment. The provider response
-              contains a test session ID but no hosted checkout URL, so this
-              page cannot redirect to a payment form.
+            <h2 className="font-serif text-xl font-bold text-[#211c18]">
+              Payment actions
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#63564b]">
+              Your reservation is pending payment. Complete test checkout to
+              confirm admission.
             </p>
             {booking.holdExpiresAt && (
-              <p className="mt-2 text-sm text-gray-300">
+              <p className="mt-2 text-xs font-medium text-[#9f3b27]">
                 Reservation hold expires{' '}
                 {formatEventDate(booking.holdExpiresAt, event.timezone)}.
               </p>
             )}
             {checkout && (
-              <div className="mt-4 rounded-lg border border-gray-800 bg-black/40 p-3 text-sm">
+              <div className="mt-4 rounded-xl border border-[#d4c7b9] bg-[#faf7f2] p-4 text-sm text-[#211c18]">
                 <p>
                   Test session:{' '}
-                  <code className="break-all text-purple-200">
+                  <code className="break-all font-mono font-semibold text-[#9f3b27]">
                     {checkout.id}
                   </code>
                 </p>
-                <p className="mt-1 text-gray-400">
+                <p className="mt-1 text-xs text-[#63564b]">
                   Session status: {checkout.status}
                   {checkout.testMode ? ' · test mode' : ''}
                 </p>
               </div>
             )}
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <button
                 className={primaryButtonClass}
                 disabled={Boolean(busyAction)}
@@ -317,15 +329,17 @@ function BookingDetails() {
                 className={primaryButtonClass}
                 to={`/bookings/${encodeURIComponent(booking.id)}/ticket`}
               >
-                View ticket
+                View ticket & admission pass
               </Link>
             </div>
           )}
 
         {canCancelFree && (
           <Panel>
-            <h2 className="text-lg font-semibold">Cancel free booking</h2>
-            <p className="mt-2 text-sm leading-6 text-gray-400">
+            <h2 className="font-serif text-xl font-bold text-[#211c18]">
+              Cancel free booking
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#63564b]">
               Free bookings can be cancelled before the event starts and before
               check-in. The server will verify eligibility when you submit.
             </p>
@@ -351,12 +365,14 @@ function BookingDetails() {
             This booking is no longer active. A valid ticket is not available.
           </Alert>
         )}
-        <Link
-          className="inline-block text-sm text-purple-300 underline underline-offset-4 hover:text-white"
-          to="/my-bookings"
-        >
-          Back to my bookings
-        </Link>
+        <div>
+          <Link
+            className="inline-block text-xs font-semibold text-[#9f3b27] underline"
+            to="/my-bookings"
+          >
+            ← Back to my bookings
+          </Link>
+        </div>
       </div>
     </BookingPageFrame>
   );
@@ -365,10 +381,12 @@ function BookingDetails() {
 function Detail({ label, value }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      <dt className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
         {label}
       </dt>
-      <dd className="mt-1 break-words text-sm text-gray-100">{value}</dd>
+      <dd className="mt-1 break-words text-sm font-medium text-[#211c18]">
+        {value}
+      </dd>
     </div>
   );
 }

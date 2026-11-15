@@ -65,8 +65,8 @@ function MyBookings() {
 
   return (
     <BookingPageFrame
-      subtitle="Your bookings and tickets, all in one place."
-      title="My bookings"
+      subtitle="Your tickets and event reservations, all in one place."
+      title="My Bookings"
     >
       {loading ? (
         <Panel>
@@ -84,12 +84,14 @@ function MyBookings() {
           </button>
         </div>
       ) : bookings.length === 0 ? (
-        <Panel className="text-center">
-          <h2 className="text-lg font-semibold">No bookings yet</h2>
-          <p className="mt-2 text-sm text-gray-400">
-            When you book an event, it will appear here.
+        <Panel className="text-center py-12">
+          <h2 className="font-serif text-2xl font-bold text-[#211c18]">
+            No bookings yet
+          </h2>
+          <p className="mt-2 text-sm text-[#63564b]">
+            When you book an event ticket, it will appear here.
           </p>
-          <Link className={`${primaryButtonClass} mt-5`} to="/events">
+          <Link className={`${primaryButtonClass} mt-6`} to="/events">
             Browse events
           </Link>
         </Panel>
@@ -104,24 +106,24 @@ function MyBookings() {
 
               return (
                 <Panel
-                  className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"
+                  className="flex flex-col justify-between gap-5 transition hover:border-[#9f3b27]/50 sm:flex-row sm:items-center"
                   key={booking.id}
                 >
-                  <div className="min-w-0 space-y-2">
+                  <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-lg font-semibold text-white">
+                      <h2 className="font-serif text-xl font-bold text-[#211c18]">
                         {eventName}
                       </h2>
                       <StatusBadge status={booking.status} />
                     </div>
-                    <p className="text-sm text-gray-400">
+                    <p className="text-xs text-[#63564b]">
                       {formatEventDate(
                         eventDate,
                         booking.eventSnapshot?.timezone ??
                           booking.event?.timezone
                       )}
                     </p>
-                    <p className="text-sm font-medium text-gray-200">
+                    <p className="font-serif text-base font-bold text-[#9f3b27]">
                       {formatMoney(booking.amountMinor, booking.currency)}
                     </p>
                   </div>
@@ -138,24 +140,27 @@ function MyBookings() {
           {pagination && (
             <nav
               aria-label="Booking pages"
-              className="mt-6 flex items-center justify-between gap-4"
+              className="mt-8 flex items-center justify-between gap-4 border-t border-[#d4c7b9] pt-6"
             >
               <button
-                className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:border-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-[#d4c7b9] bg-white px-4 py-2 text-sm font-medium text-[#211c18] transition hover:bg-[#faf7f2] disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!hasPrevious}
                 onClick={() => changePage(currentPage - 1)}
                 type="button"
               >
                 Previous
               </button>
-              <p aria-live="polite" className="text-sm text-gray-400">
+              <p
+                aria-live="polite"
+                className="text-xs font-medium text-[#63564b]"
+              >
                 Page {currentPage}
                 {pagination.total != null
                   ? ` · ${pagination.total} bookings`
                   : ''}
               </p>
               <button
-                className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:border-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-[#d4c7b9] bg-white px-4 py-2 text-sm font-medium text-[#211c18] transition hover:bg-[#faf7f2] disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={!hasNext}
                 onClick={() => changePage(currentPage + 1)}
                 type="button"

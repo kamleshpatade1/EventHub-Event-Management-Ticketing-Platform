@@ -77,24 +77,24 @@ function TestCheckout() {
 
   return (
     <BookingPageFrame
-      subtitle="This is a simulated test payment. No real payment gateway or charge is involved."
-      title="Test checkout"
+      subtitle="This is a simulated test payment environment. No real payment gateway or real currency is charged."
+      title="Test Checkout"
     >
       <Panel className="max-w-2xl">
-        <div className="space-y-5">
+        <div className="space-y-6">
           <Alert tone="info">
             Choose an outcome to simulate the payment provider response. Your
-            booking status will be determined by the server after it verifies
-            and processes the signed test webhook.
+            booking status will be verified and processed by the server upon
+            receipt.
           </Alert>
           {typeof location.state?.notice === 'string' && (
             <Alert tone="info">{location.state.notice}</Alert>
           )}
-          <div className="rounded-xl border border-gray-800 bg-black/40 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Test checkout session
+          <div className="rounded-xl border border-[#d4c7b9] bg-[#faf7f2] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+              Test Checkout Session ID
             </p>
-            <p className="mt-2 break-all font-mono text-sm text-purple-200">
+            <p className="mt-1.5 break-all font-mono text-sm font-semibold text-[#9f3b27]">
               {checkoutId}
             </p>
           </div>
@@ -109,27 +109,27 @@ function TestCheckout() {
             <p
               aria-live="polite"
               role="status"
-              className="text-sm text-gray-300"
+              className="text-sm font-medium text-[#63564b]"
             >
-              Processing test payment…
+              Processing test payment outcome…
             </p>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 pt-2">
             <button
               className={primaryButtonClass}
               disabled={processing || !bookingId || !checkoutId}
               onClick={() => submitOutcome('PAID')}
               type="button"
             >
-              {processing ? 'Processing…' : 'Pay'}
+              {processing ? 'Processing…' : 'Simulate Successful Payment'}
             </button>
             <button
-              className={secondaryButtonClass}
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#f4bebe] bg-[#fbebe8] px-5 py-2.5 text-sm font-semibold text-[#9f3b27] transition-colors hover:bg-[#f8ded9] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={processing || !bookingId || !checkoutId}
               onClick={() => submitOutcome('FAILED')}
               type="button"
             >
-              Fail payment
+              Simulate Failed Payment
             </button>
             <Link
               className={secondaryButtonClass}

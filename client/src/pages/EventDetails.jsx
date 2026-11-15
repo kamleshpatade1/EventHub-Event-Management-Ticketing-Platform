@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import { CalendarDays, MapPin, Ticket, Users, ArrowLeft } from 'lucide-react';
+import {
+  CalendarDays,
+  MapPin,
+  Ticket,
+  Users,
+  ArrowLeft,
+  Clock,
+} from 'lucide-react';
+import Navbar from '../components/Navbar.jsx';
+import Footer from '../components/Footer.jsx';
 import { useAuth } from '../auth/useAuth.js';
 import { api } from '../lib/api.js';
 import { getEventCover } from './eventCatalog.js';
@@ -84,7 +93,7 @@ function formatPrice(event) {
 
 export default function EventDetails() {
   const { eventId } = useParams();
-  const { isAuthenticated, loading: authLoading, setUser, user } = useAuth();
+  const { loading: authLoading, setUser, user } = useAuth();
   const userId = user?.id;
   const location = useLocation();
   const navigate = useNavigate();
@@ -98,6 +107,39 @@ export default function EventDetails() {
   const [bookingLookup, setBookingLookup] = useState(null);
   const bookingLock = useRef(false);
   const eventUrl = `${location.pathname}${location.search}${location.hash}`;
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadEvent() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const result = await api(`/events/${encodeURIComponent(eventId)}`);
+        if (!cancelled) setEvent(result.data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err.message || 'Unable to load event details. Please try again.'
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadEvent();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
   const currentLookup =
     userId &&
     bookingLookup?.userId === userId &&
@@ -125,78 +167,32 @@ export default function EventDetails() {
     return () => controller.abort();
   }, [eventId, userId]);
 
-  useEffect(() => {
-    let cancelled = false;
+  async function handleBooking() {
+    if (bookingLock.current || bookingLoading) return;
 
-    async function loadEvent() {
-      setLoading(true);
-      setError('');
-      setEvent(null);
+    setBookingError('');
+    setBookingRequiresSignIn(false);
 
-      try {
-        const result = await api(`/events/${encodeURIComponent(eventId)}`);
-        if (!cancelled) {
-          setCurrentTime(new Date());
-          setEvent(result.data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err.status === 404
-              ? 'This event could not be found or is no longer available.'
-              : err.message || 'Unable to load event details.'
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (!user) {
+      navigate('/login', { state: { from: eventUrl } });
+      return;
     }
 
-    loadEvent();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId]);
-
-  useEffect(() => {
-    if (!event) return undefined;
-
-    const intervalId = window.setInterval(
-      () => setCurrentTime(new Date()),
-      15_000
-    );
-
-    return () => window.clearInterval(intervalId);
-  }, [event]);
-
-  async function handleBooking() {
-    if (
-      bookingLock.current ||
-      bookingLoading ||
-      authLoading ||
-      checkingBooking ||
-      existingBooking
-    )
-      return;
-
-    if (!isAuthenticated) {
-      navigate('/login', { state: { from: eventUrl } });
+    if (existingBooking?.id) {
+      navigate(`/bookings/${encodeURIComponent(existingBooking.id)}`);
       return;
     }
 
     bookingLock.current = true;
     setBookingLoading(true);
-    setBookingError('');
-    setBookingRequiresSignIn(false);
 
     try {
-      if (Number(event.priceMinor ?? 0) > 0) {
+      if (isEventPaid(event)) {
         const bookingResponse = await api(
-          `/events/${encodeURIComponent(eventId)}/bookings/paid`,
+          `/events/${encodeURIComponent(eventId)}/bookings`,
           { method: 'POST' }
         );
-        const booking = bookingResponse.data?.booking;
+        const booking = bookingResponse.data ?? bookingResponse.ticket;
         const alreadyBooked = bookingResponse.created === false;
 
         if (!booking?.id) {
@@ -271,34 +267,46 @@ export default function EventDetails() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-black px-4 py-20 text-white">
-        <div role="status" className="mx-auto max-w-4xl animate-pulse">
-          <div className="h-8 w-2/3 rounded bg-gray-800" />
-          <div className="mt-6 h-48 rounded-2xl bg-gray-900 sm:h-72" />
-          <div className="mt-6 h-5 w-1/2 rounded bg-gray-800" />
-          <span className="sr-only">Loading event details...</span>
-        </div>
-      </main>
+      <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+        <Navbar />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-16 sm:px-6">
+          <div role="status" className="animate-pulse space-y-6">
+            <div className="h-6 w-32 rounded-full bg-[#d4c7b9]/60" />
+            <div className="h-10 w-2/3 rounded-xl bg-[#d4c7b9]/60" />
+            <div className="aspect-[3/2] max-h-[28rem] rounded-2xl bg-[#d4c7b9]/40" />
+            <span className="sr-only">Loading event details...</span>
+          </div>
+        </main>
+        <Footer />
+      </div>
     );
   }
 
   if (error || !event) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-        <div className="max-w-lg rounded-2xl border border-gray-800 bg-gray-950 p-8 text-center">
-          <Ticket className="mx-auto h-10 w-10 text-purple-400" />
-          <h1 className="mt-4 text-2xl font-bold">Event unavailable</h1>
-          <p role="alert" className="mt-3 text-sm leading-6 text-gray-400">
-            {error || 'We could not find this event.'}
-          </p>
-          <Link
-            to="/events"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold hover:bg-purple-500"
-          >
-            <ArrowLeft className="h-4 w-4" /> Browse events
-          </Link>
-        </div>
-      </main>
+      <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+        <Navbar />
+        <main className="mx-auto flex w-full max-w-lg flex-1 items-center justify-center px-4 py-16">
+          <div className="rounded-2xl border border-[#d4c7b9] bg-white p-8 text-center shadow-xs">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#fbebe8] text-[#9f3b27]">
+              <Ticket className="h-7 w-7" aria-hidden="true" />
+            </div>
+            <h1 className="mt-4 font-serif text-2xl font-bold text-[#211c18]">
+              Event unavailable
+            </h1>
+            <p role="alert" className="mt-2 text-sm text-[#63564b]">
+              {error || 'We could not find this event.'}
+            </p>
+            <Link
+              to="/events"
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#211c18] px-5 py-2.5 text-sm font-semibold text-[#fff4e8] transition hover:bg-[#9f3b27]"
+            >
+              <ArrowLeft className="h-4 w-4" /> Browse all events
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
     );
   }
 
@@ -318,33 +326,38 @@ export default function EventDetails() {
     : bookingStateLabel;
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      <header className="border-b border-gray-800 bg-gradient-to-br from-purple-950/70 via-black to-black">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div className="flex min-h-screen flex-col bg-[#f3eee6] text-[#211c18]">
+      <Navbar />
+
+      <header className="border-b border-[#d4c7b9] bg-[#211c18] text-[#fff4e8]">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
           <Link
             to="/events"
-            className="inline-flex items-center gap-2 text-sm text-purple-300 hover:text-purple-200"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#ff9979] hover:underline"
           >
-            <ArrowLeft className="h-4 w-4" /> All events
+            <ArrowLeft className="h-3.5 w-3.5" /> All events
           </Link>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300">
+          <div className="mt-6 flex flex-wrap items-center gap-2.5">
+            <span className="rounded-full bg-[#fff4e8]/15 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-[#fff4e8]">
               {event.category || 'Event'}
             </span>
             {event.status && (
-              <span className="text-xs capitalize text-gray-400">
+              <span className="text-xs uppercase tracking-wider text-[#d4c7b9]">
                 {String(event.status).toLowerCase()}
               </span>
             )}
           </div>
 
-          <h1 className="mt-4 max-w-4xl text-3xl font-extrabold tracking-tight sm:text-5xl">
+          <h1 className="mt-3 max-w-4xl font-serif text-3xl font-extrabold tracking-tight text-[#fff4e8] sm:text-5xl">
             {event.title}
           </h1>
 
-          <p className="mt-4 flex items-center gap-2 text-sm text-gray-300 sm:text-base">
-            <MapPin className="h-5 w-5 shrink-0 text-purple-400" />
+          <p className="mt-4 flex items-center gap-2 text-sm text-[#d4c7b9] sm:text-base">
+            <MapPin
+              className="h-4 w-4 shrink-0 text-[#ff9979]"
+              aria-hidden="true"
+            />
             {[event.venue, event.address, event.city]
               .filter(Boolean)
               .join(', ') || 'Location to be announced'}
@@ -352,9 +365,9 @@ export default function EventDetails() {
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_340px] lg:py-12">
-        <div>
-          <div className="aspect-[3/2] max-h-[28rem] overflow-hidden rounded-2xl border border-gray-800 bg-gray-900">
+      <section className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:py-12">
+        <div className="space-y-8">
+          <div className="aspect-[3/2] max-h-[30rem] overflow-hidden rounded-2xl border border-[#d4c7b9] bg-[#eadecc] shadow-xs">
             <img
               src={getEventCover(event)}
               alt=""
@@ -364,48 +377,67 @@ export default function EventDetails() {
             />
           </div>
 
-          <section className="mt-8">
-            <h2 className="text-xl font-bold">About this event</h2>
-            <p className="mt-4 whitespace-pre-line text-sm leading-7 text-gray-300 sm:text-base">
+          <section className="rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-8">
+            <h2 className="font-serif text-2xl font-bold text-[#211c18]">
+              About this event
+            </h2>
+            <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-[#4d4036]">
               {event.description ||
                 'More information about this event will be available soon.'}
             </p>
           </section>
 
-          <section className="mt-8 rounded-2xl border border-gray-800 bg-gray-950 p-5 sm:p-6">
-            <h2 className="text-lg font-bold">Event information</h2>
-            <div className="mt-5 space-y-5">
-              <div className="flex items-start gap-3">
-                <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" />
+          <section className="rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-xs sm:p-8">
+            <h2 className="font-serif text-2xl font-bold text-[#211c18]">
+              Event information
+            </h2>
+            <div className="mt-6 space-y-5">
+              <div className="flex items-start gap-3.5">
+                <CalendarDays
+                  className="mt-0.5 h-5 w-5 shrink-0 text-[#9f3b27]"
+                  aria-hidden="true"
+                />
                 <div>
-                  <p className="text-sm font-medium">Start</p>
-                  <p className="mt-1 text-sm text-gray-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                    Date & Time
+                  </p>
+                  <p className="mt-1 text-base font-medium text-[#211c18]">
                     {formatEventDateTime(event.startAt, event.timezone)}
                   </p>
                 </div>
               </div>
 
               {event.endAt && (
-                <div className="flex items-start gap-3">
-                  <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" />
+                <div className="flex items-start gap-3.5">
+                  <Clock
+                    className="mt-0.5 h-5 w-5 shrink-0 text-[#9f3b27]"
+                    aria-hidden="true"
+                  />
                   <div>
-                    <p className="text-sm font-medium">End</p>
-                    <p className="mt-1 text-sm text-gray-400">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                      Ends
+                    </p>
+                    <p className="mt-1 text-base font-medium text-[#211c18]">
                       {formatEventDateTime(event.endAt, event.timezone)}
                     </p>
                   </div>
                 </div>
               )}
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[#8c7d70]">
                 Timezone: {event.timezone || 'Unavailable'}
               </p>
 
-              <div className="flex items-start gap-3">
-                <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" />
+              <div className="flex items-start gap-3.5 border-t border-[#eadecc] pt-4">
+                <MapPin
+                  className="mt-0.5 h-5 w-5 shrink-0 text-[#9f3b27]"
+                  aria-hidden="true"
+                />
                 <div>
-                  <p className="text-sm font-medium">Venue</p>
-                  <p className="mt-1 text-sm text-gray-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                    Venue
+                  </p>
+                  <p className="mt-1 text-base font-medium text-[#211c18]">
                     {[event.venue, event.address, event.city]
                       .filter(Boolean)
                       .join(', ') || 'To be announced'}
@@ -414,11 +446,16 @@ export default function EventDetails() {
               </div>
 
               {event.organizer?.name && (
-                <div className="flex items-start gap-3">
-                  <Users className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" />
+                <div className="flex items-start gap-3.5 border-t border-[#eadecc] pt-4">
+                  <Users
+                    className="mt-0.5 h-5 w-5 shrink-0 text-[#9f3b27]"
+                    aria-hidden="true"
+                  />
                   <div>
-                    <p className="text-sm font-medium">Organizer</p>
-                    <p className="mt-1 text-sm text-gray-400">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                      Organizer
+                    </p>
+                    <p className="mt-1 text-base font-medium text-[#211c18]">
                       {event.organizer.name}
                     </p>
                   </div>
@@ -429,12 +466,16 @@ export default function EventDetails() {
         </div>
 
         <aside>
-          <div className="sticky top-6 rounded-2xl border border-gray-800 bg-gray-950 p-5 sm:p-6">
-            <p className="text-sm text-gray-400">Ticket price</p>
-            <p className="mt-2 text-3xl font-extrabold">{formatPrice(event)}</p>
+          <div className="sticky top-24 rounded-2xl border border-[#d4c7b9] bg-white p-6 shadow-sm sm:p-7">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+              Ticket price
+            </p>
+            <p className="mt-2 font-serif text-3xl font-extrabold text-[#211c18]">
+              {formatPrice(event)}
+            </p>
 
-            <div className="mt-5 border-t border-gray-800 pt-5">
-              <p className="text-sm text-gray-300">
+            <div className="mt-5 border-t border-[#eadecc] pt-5">
+              <p className="text-sm font-medium text-[#211c18]">
                 {Number.isFinite(available)
                   ? available > 0
                     ? `${available} places available`
@@ -442,7 +483,7 @@ export default function EventDetails() {
                   : 'Availability subject to confirmation'}
               </p>
 
-              <p className="mt-2 text-xs leading-5 text-gray-500">
+              <p className="mt-2 text-xs leading-relaxed text-[#63564b]">
                 {event.registrationClosesAt
                   ? `Registration closes ${formatEventDateTime(event.registrationClosesAt, event.timezone)}`
                   : 'Check event details before booking.'}
@@ -451,18 +492,20 @@ export default function EventDetails() {
 
             <p
               aria-live="polite"
-              className="mt-4 text-sm font-medium text-gray-300"
+              className="mt-4 text-xs font-medium text-[#63564b]"
             >
               Booking status:{' '}
-              {existingBooking
-                ? existingBooking.status === 'PENDING_PAYMENT'
-                  ? 'Awaiting payment'
-                  : 'Already booked'
-                : bookingStateLabel}
+              <span className="font-semibold text-[#211c18]">
+                {existingBooking
+                  ? existingBooking.status === 'PENDING_PAYMENT'
+                    ? 'Awaiting payment'
+                    : 'Already booked'
+                  : bookingStateLabel}
+              </span>
             </p>
 
             {isEventPaid(event) && (
-              <p className="mt-4 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm leading-6 text-purple-100">
+              <p className="mt-4 rounded-xl border border-[#eadecc] bg-[#faf7f2] p-3 text-xs leading-relaxed text-[#63564b]">
                 Paid ticket cancellation and refunds are not supported in this
                 MVP. This is a simulated test payment. No real payment gateway
                 or charge is involved, and no real money is charged.
@@ -472,14 +515,14 @@ export default function EventDetails() {
             {existingBooking ? (
               <Link
                 to={`/bookings/${encodeURIComponent(existingBooking.id)}`}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-3 font-semibold hover:bg-purple-500"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#211c18] px-5 py-3 font-semibold text-[#fff4e8] transition hover:bg-[#9f3b27]"
               >
                 View booking <Ticket className="h-4 w-4" />
               </Link>
             ) : checkingBooking ? (
               <p
                 role="status"
-                className="mt-6 text-center text-sm text-gray-300"
+                className="mt-6 text-center text-sm text-[#63564b]"
               >
                 Checking your booking…
               </p>
@@ -488,7 +531,7 @@ export default function EventDetails() {
                 type="button"
                 onClick={handleBooking}
                 disabled={bookingLoading || authLoading}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-3 font-semibold hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#9f3b27] px-5 py-3 font-semibold text-[#fff4e8] transition hover:bg-[#852f1e] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {bookingLoading
                   ? 'Processing booking...'
@@ -501,7 +544,7 @@ export default function EventDetails() {
               <button
                 type="button"
                 disabled
-                className="mt-6 w-full cursor-not-allowed rounded-xl bg-gray-800 px-4 py-3 font-semibold text-gray-500"
+                className="mt-6 w-full cursor-not-allowed rounded-full bg-[#eadecc] px-5 py-3 font-semibold text-[#8c7d70]"
               >
                 {bookingActionLabel}
               </button>
@@ -512,7 +555,7 @@ export default function EventDetails() {
               bookingState.status === 'sold_out' && (
                 <p
                   role="alert"
-                  className="mt-3 text-center text-sm text-red-300"
+                  className="mt-3 text-center text-xs font-semibold text-[#9f3b27]"
                 >
                   This event is sold out.
                 </p>
@@ -520,17 +563,20 @@ export default function EventDetails() {
             {currentLookup?.failed && (
               <Link
                 to="/my-bookings"
-                className="mt-3 block text-center text-sm text-purple-300 underline"
+                className="mt-3 block text-center text-xs font-semibold text-[#9f3b27] underline"
               >
                 Check my bookings
               </Link>
             )}
             {bookingError && (
-              <p role="alert" className="mt-3 text-sm leading-5 text-red-300">
+              <p
+                role="alert"
+                className="mt-3 rounded-lg border border-[#f4bebe] bg-[#fbebe8] p-3 text-xs leading-relaxed text-[#9f3b27]"
+              >
                 {bookingError}{' '}
                 {bookingRequiresSignIn && (
                   <Link
-                    className="font-semibold underline underline-offset-2"
+                    className="font-bold underline underline-offset-2"
                     to="/login"
                     state={{ from: eventUrl }}
                   >
@@ -541,13 +587,15 @@ export default function EventDetails() {
             )}
 
             {!existingBooking && !checkingBooking && bookingState.canBook && (
-              <p className="mt-3 text-center text-xs leading-5 text-gray-500">
+              <p className="mt-3 text-center text-[11px] leading-5 text-[#8c7d70]">
                 Booking and payment availability are confirmed in the next step.
               </p>
             )}
           </div>
         </aside>
       </section>
-    </main>
+
+      <Footer />
+    </div>
   );
 }

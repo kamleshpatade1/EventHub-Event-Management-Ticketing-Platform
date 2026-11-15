@@ -6,7 +6,7 @@ import { useAuth } from '../auth/useAuth.js';
 import { getSafeRedirectDestination } from '../auth/redirectUtils.js';
 
 const inputClassName =
-  'h-12 w-full rounded-lg border border-[#3A3348] bg-[#14141B] px-4 text-sm text-white outline-none placeholder:text-[#71717A] focus-visible:border-[#8B5CF6]';
+  'h-11 w-full rounded-xl border border-[#d4c7b9] bg-white px-3.5 text-sm text-[#211c18] outline-none placeholder:text-[#8c7d70] focus:border-[#9f3b27] focus:ring-1 focus:ring-[#9f3b27] transition-colors';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -69,13 +69,24 @@ function Login() {
       subtitle="Enter your email and password to access your account."
       footer={
         <>
-          Don't Have An Account? <Link to="/signup">Register Now.</Link>
+          Don't have an account?{' '}
+          <Link
+            to="/signup"
+            className="font-semibold text-[#9f3b27] hover:underline"
+          >
+            Register now.
+          </Link>
         </>
       }
     >
-      <form className="space-y-5" noValidate onSubmit={handleSubmit}>
-        <div className="space-y-2">
-          <label htmlFor="login-email">Email</label>
+      <form className="space-y-4" noValidate onSubmit={handleSubmit}>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="login-email"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
+          >
+            Email
+          </label>
           <input
             id="login-email"
             className={inputClassName}
@@ -94,16 +105,21 @@ function Login() {
             aria-invalid={!!errors.email}
           />
           {errors.email && (
-            <p className="text-xs text-red-400">{errors.email}</p>
+            <p className="text-xs text-[#9f3b27]">{errors.email}</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor="login-password">Password</label>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="login-password"
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
+          >
+            Password
+          </label>
           <div className="relative">
             <input
               id="login-password"
-              className={`${inputClassName} pr-12`}
+              className={`${inputClassName} pr-11`}
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               placeholder="Enter your password"
@@ -120,7 +136,7 @@ function Login() {
             />
             <button
               type="button"
-              className="absolute right-3 top-3"
+              className="absolute right-3 top-3 text-[#8c7d70] hover:text-[#211c18]"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
@@ -128,36 +144,40 @@ function Login() {
             </button>
           </div>
           {errors.password && (
-            <p className="text-xs text-red-400">{errors.password}</p>
+            <p className="text-xs text-[#9f3b27]">{errors.password}</p>
           )}
         </div>
 
         {errors.form && (
-          <p role="alert" className="text-xs text-red-400">
+          <p
+            role="alert"
+            className="rounded-lg border border-[#f4bebe] bg-[#fbebe8] p-2.5 text-xs text-[#9f3b27]"
+          >
             {errors.form}
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <label className="flex items-center gap-2 text-[#63564b] cursor-pointer">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
+              className="size-4 rounded accent-[#9f3b27]"
             />
-            Remember Me
+            Remember me
           </label>
-          <a href="#forgot-password" className="text-sm text-purple-400">
-            Forgot Password?
+          <a href="#forgot-password" className="text-[#9f3b27] hover:underline">
+            Forgot password?
           </a>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="h-12 w-full rounded-lg bg-[#8B5CF6] font-semibold text-white disabled:opacity-60"
+          className="mt-2 h-11 w-full rounded-full bg-[#9f3b27] font-semibold text-[#fff4e8] transition hover:bg-[#852f1e] disabled:cursor-not-allowed disabled:opacity-60 shadow-xs"
         >
-          {loading ? 'Logging In...' : 'Log In'}
+          {loading ? 'Logging in...' : 'Log in'}
         </button>
       </form>
     </AuthLayout>
