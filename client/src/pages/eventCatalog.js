@@ -1,3 +1,25 @@
+const categoryCovers = new Map([
+  ['music', 'indie'],
+  ['comedy', 'stand-up'],
+  ['workshops', 'pottery'],
+  ['workshop', 'pottery'],
+  ['art & culture', 'dance'],
+  ['tech & business', 'makers'],
+  ['tech', 'makers'],
+  ['sports', 'football'],
+  ['food & drinks', 'food'],
+]);
+const coverKeys = new Set([...categoryCovers.values(), 'default']);
+
+export function getEventCover(event) {
+  const category = event.category?.trim().toLowerCase();
+  const cover = coverKeys.has(event.coverKey)
+    ? event.coverKey
+    : (categoryCovers.get(category) ?? 'default');
+
+  return `${import.meta.env?.BASE_URL ?? '/'}eventhub/covers/${cover}.webp`;
+}
+
 export function buildCatalogQuery({
   search = '',
   category = 'All',

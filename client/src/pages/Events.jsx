@@ -5,6 +5,7 @@ import { api } from '../lib/api.js';
 import {
   buildCatalogQuery,
   clearCatalogFilters,
+  getEventCover,
   updateCatalogFilter,
 } from './eventCatalog.js';
 
@@ -296,8 +297,15 @@ export default function Events() {
                 key={event.id}
                 className="group overflow-hidden rounded-2xl border border-gray-800 bg-gray-950 transition hover:-translate-y-1 hover:border-purple-500/60"
               >
-                <div className="flex h-36 items-center justify-center bg-gradient-to-br from-purple-950 via-gray-900 to-indigo-950">
-                  <Ticket className="h-12 w-12 text-purple-300/70 transition group-hover:scale-110" />
+                <div className="aspect-[3/2] overflow-hidden bg-gray-900">
+                  <img
+                    src={getEventCover(event)}
+                    alt=""
+                    width="768"
+                    height="512"
+                    loading="lazy"
+                    className="size-full object-cover motion-safe:transition-transform motion-safe:group-hover:scale-[1.03]"
+                  />
                 </div>
 
                 <div className="p-5">

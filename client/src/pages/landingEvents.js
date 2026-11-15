@@ -1,11 +1,10 @@
+import { getEventCover } from './eventCatalog.js';
+
 export const homepageEventRequests = {
   upcoming: '/events?limit=8',
   free: '/events?pricing=free&limit=8',
   paid: '/events?pricing=paid&limit=8',
 };
-
-const fallbackImage =
-  'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=600&h=450&fit=crop';
 
 export async function fetchHomepageEvents(request, path) {
   const result = await request(path);
@@ -37,7 +36,7 @@ export function formatHomepageEvent(event) {
 
   return {
     href: `/events/${encodeURIComponent(event.id)}`,
-    image: fallbackImage,
+    image: getEventCover(event),
     date:
       date && !Number.isNaN(date.getTime())
         ? new Intl.DateTimeFormat('en-IN', {

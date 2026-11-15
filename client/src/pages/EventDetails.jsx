@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { CalendarDays, MapPin, Ticket, Users, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../auth/useAuth.js';
 import { api } from '../lib/api.js';
+import { getEventCover } from './eventCatalog.js';
 import {
   formatEventDateTime,
   getBookingState,
@@ -353,8 +354,14 @@ export default function EventDetails() {
 
       <section className="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_340px] lg:py-12">
         <div>
-          <div className="flex min-h-52 items-center justify-center rounded-2xl border border-gray-800 bg-gradient-to-br from-purple-950 via-gray-900 to-indigo-950 sm:min-h-72">
-            <Ticket className="h-16 w-16 text-purple-300/70" />
+          <div className="aspect-[3/2] max-h-[28rem] overflow-hidden rounded-2xl border border-gray-800 bg-gray-900">
+            <img
+              src={getEventCover(event)}
+              alt=""
+              width="768"
+              height="512"
+              className="size-full object-cover"
+            />
           </div>
 
           <section className="mt-8">
