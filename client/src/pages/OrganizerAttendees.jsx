@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
   ArrowLeft,
@@ -15,120 +15,114 @@ import { api } from '../lib/api.js';
 function OrganizerAttendees() {
   const { eventId } = useParams();
 
-  const [attendees, setAttendees] = useState([]);
-  const [pagination, setPagination] = useState({
+  const [filters, setFilters] = useState({
     page: 1,
-    limit: 10,
-    total: 0,
+    search: '',
+    checkedIn: '',
   });
   const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [statusInput, setStatusInput] = useState('');
+  const [request, setRequest] = useState(null);
+  const [revision, setRevision] = useState(0);
   const [ticketCode, setTicketCode] = useState('');
-  const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const loadAttendees = useCallback(
-    async (page = 1, searchTerm = '') => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const query = new URLSearchParams({
-          page: String(page),
-          limit: '10',
-        });
-
-        if (searchTerm.trim()) {
-          query.set('search', searchTerm.trim());
-        }
-
-        const result = await api(
-          `/organizer/events/${eventId}/attendees?${query.toString()}`
-        );
-
-        setAttendees(result.data ?? []);
-        setPagination(result.pagination ?? { page, limit: 10, total: 0 });
-      } catch (err) {
-        setError(err.message || 'Unable to load attendees.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [eventId]
-  );
-
-  useEffect(() => {
-    let active = true;
-
-    async function fetchAttendees() {
-      try {
-        const query = new URLSearchParams({ page: '1', limit: '10' });
-        const result = await api(
-          `/organizer/events/${eventId}/attendees?${query.toString()}`
-        );
-
-        if (!active) return;
-
-        setAttendees(result.data ?? []);
-        setPagination(result.pagination ?? { page: 1, limit: 10, total: 0 });
-      } catch (err) {
-        if (active) {
-          setError(err.message || 'Unable to load attendees.');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
-    fetchAttendees();
-
-    return () => {
-      active = false;
-    };
-  }, [eventId]);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setSearch(searchInput.trim());
-    setNotice('');
-    loadAttendees(1, searchInput.trim());
+  const query = new URLSearchParams({
+    page: String(filters.page),
+    limit: '10',
+    ...(filters.search && { search: filters.search }),
+    ...(filters.checkedIn && { checkedIn: filters.checkedIn }),
+  }).toString();
+  const url = `/organizer/events/${eventId}/attendees?${query}`;
+  const current =
+    request?.url === url && request.revision === revision ? request : null;
+  const loading = !current;
+  const attendees = current?.result?.data ?? [];
+  const pagination = current?.result?.pagination ?? {
+    page: filters.page,
+    limit: 10,
+    total: 0,
   };
-
-  const handleCheckIn = async (e) => {
-    e.preventDefault();
-
-    const code = ticketCode.trim();
-    if (!code) {
-      setError('Enter a ticket code before checking in.');
-      return;
-    }
-
-    setCheckingIn(true);
-    setError('');
-    setNotice('');
-
-    try {
-      await api(`/organizer/events/${eventId}/check-ins`, {
-        method: 'POST',
-        body: { ticketCode: code },
-      });
-
-      setTicketCode('');
-      setNotice('Ticket checked in successfully.');
-      await loadAttendees(pagination.page, search);
-    } catch (err) {
-      setError(err.message || 'Unable to check in this ticket.');
-    } finally {
-      setCheckingIn(false);
-    }
-  };
-
+  const error = actionError || current?.error;
   const totalPages = Math.max(
     1,
     Math.ceil(pagination.total / pagination.limit)
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api(url, { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setRequest({ url, revision, result });
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setRequest({
+            url,
+            revision,
+            error: err.message || 'Unable to load attendees.',
+          });
+        }
+      });
+    return () => controller.abort();
+  }, [url, revision]);
+
+  function reloadAttendees() {
+    setActionError('');
+    setRevision((value) => value + 1);
+  }
+
+  function goToPage(page) {
+    setActionError('');
+    setFilters((currentFilters) => ({ ...currentFilters, page }));
+  }
+
+  function handleSearch(event) {
+    event.preventDefault();
+    setFilters({ page: 1, search: searchInput.trim(), checkedIn: statusInput });
+    setNotice('');
+    reloadAttendees();
+  }
+
+  async function checkIn(selector) {
+    if (checkingIn) return;
+    setCheckingIn(true);
+    setActionError('');
+    setNotice('');
+
+    try {
+      const { data } = await api(`/organizer/events/${eventId}/check-ins`, {
+        method: 'POST',
+        body: selector,
+      });
+
+      if (selector.ticketCode) setTicketCode('');
+      setNotice(
+        data.alreadyCheckedIn
+          ? 'This ticket was already checked in.'
+          : 'Ticket checked in successfully.'
+      );
+      if (filters.checkedIn === 'false') goToPage(1);
+      reloadAttendees();
+    } catch (err) {
+      setActionError(err.message || 'Unable to check in this ticket.');
+    } finally {
+      setCheckingIn(false);
+    }
+  }
+
+  function handleCheckIn(event) {
+    event.preventDefault();
+    const code = ticketCode.trim();
+    if (!code) {
+      setNotice('');
+      setActionError('Enter a ticket code before checking in.');
+      return;
+    }
+    checkIn({ ticketCode: code });
+  }
 
   return (
     <main className="min-h-screen bg-[#0b0b12] px-4 py-10 text-white sm:px-6 lg:px-10">
@@ -207,7 +201,7 @@ function OrganizerAttendees() {
             <p>{error}</p>
             <button
               type="button"
-              onClick={() => loadAttendees(pagination.page, search)}
+              onClick={reloadAttendees}
               className="mt-2 font-semibold underline"
             >
               Reload attendees
@@ -230,8 +224,8 @@ function OrganizerAttendees() {
 
             <button
               type="button"
-              disabled={loading}
-              onClick={() => loadAttendees(pagination.page, search)}
+              disabled={loading || checkingIn}
+              onClick={reloadAttendees}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:bg-white/5 disabled:opacity-50"
             >
               <RefreshCw size={16} />
@@ -255,16 +249,30 @@ function OrganizerAttendees() {
                 id="attendeeSearch"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+                maxLength={100}
                 placeholder="Search by attendee name or booking ID"
                 className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-4 text-white outline-none transition placeholder:text-gray-500 focus:border-purple-500"
               />
             </div>
+            <label htmlFor="attendeeCheckInStatus" className="sr-only">
+              Check-in status
+            </label>
+            <select
+              id="attendeeCheckInStatus"
+              value={statusInput}
+              onChange={(event) => setStatusInput(event.target.value)}
+              className="rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-white focus:border-purple-500"
+            >
+              <option value="">All check-in statuses</option>
+              <option value="true">Checked in</option>
+              <option value="false">Not checked in</option>
+            </select>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || checkingIn}
               className="rounded-xl border border-white/15 px-5 py-3 font-medium transition hover:bg-white/10 disabled:opacity-50"
             >
-              Search
+              Apply filters
             </button>
           </form>
 
@@ -272,12 +280,12 @@ function OrganizerAttendees() {
             <div className="py-12 text-center text-gray-400">
               Loading attendees...
             </div>
-          ) : attendees.length === 0 ? (
+          ) : current.error ? null : attendees.length === 0 ? (
             <div className="rounded-xl border border-dashed border-white/15 px-5 py-12 text-center">
               <Users size={36} className="mx-auto mb-3 text-gray-500" />
               <h3 className="font-semibold">No attendees found</h3>
               <p className="mt-2 text-sm text-gray-400">
-                Confirmed bookings will appear here.
+                No confirmed bookings match these filters.
               </p>
             </div>
           ) : (
@@ -288,6 +296,7 @@ function OrganizerAttendees() {
                     <th className="px-3 py-3 font-medium">Attendee</th>
                     <th className="px-3 py-3 font-medium">Booking ID</th>
                     <th className="px-3 py-3 font-medium">Check-in status</th>
+                    <th className="px-3 py-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -314,6 +323,21 @@ function OrganizerAttendees() {
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-4">
+                        {!attendee.checkedInAt && (
+                          <button
+                            type="button"
+                            disabled={checkingIn}
+                            aria-label={`Check in ${attendee.name || 'attendee'}`}
+                            onClick={() =>
+                              checkIn({ bookingId: attendee.bookingId })
+                            }
+                            className="min-h-10 whitespace-nowrap rounded-lg border border-purple-400/40 px-3 text-sm font-semibold text-purple-200 hover:bg-purple-500/15 focus-visible:outline-2 focus-visible:outline-purple-400 disabled:opacity-50"
+                          >
+                            Check in
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -321,36 +345,38 @@ function OrganizerAttendees() {
             </div>
           )}
 
-          {!loading && totalPages > 1 && (
-            <nav
-              aria-label="Attendee pages"
-              className="mt-6 flex items-center justify-between gap-4"
-            >
-              <button
-                type="button"
-                disabled={pagination.page <= 1}
-                onClick={() => loadAttendees(pagination.page - 1, search)}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
+          {!loading &&
+            current.result &&
+            (totalPages > 1 || pagination.page > 1) && (
+              <nav
+                aria-label="Attendee pages"
+                className="mt-6 flex items-center justify-between gap-4"
               >
-                <ChevronLeft size={16} />
-                Previous
-              </button>
+                <button
+                  type="button"
+                  disabled={checkingIn || pagination.page <= 1}
+                  onClick={() => goToPage(pagination.page - 1)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
 
-              <span className="text-sm text-gray-400">
-                Page {pagination.page} of {totalPages}
-              </span>
+                <span className="text-sm text-gray-400">
+                  Page {pagination.page} of {totalPages}
+                </span>
 
-              <button
-                type="button"
-                disabled={pagination.page >= totalPages}
-                onClick={() => loadAttendees(pagination.page + 1, search)}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
-              >
-                Next
-                <ChevronRight size={16} />
-              </button>
-            </nav>
-          )}
+                <button
+                  type="button"
+                  disabled={checkingIn || pagination.page >= totalPages}
+                  onClick={() => goToPage(pagination.page + 1)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
+              </nav>
+            )}
         </section>
       </div>
     </main>

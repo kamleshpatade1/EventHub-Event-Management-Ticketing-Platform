@@ -167,6 +167,40 @@ test(
     });
 
     await t.test(
+      'only the holder can look up their active booking on a sold-out event',
+      async () => {
+        const event = await createEvent({ capacity: 1 });
+        const { data: booking } = await (
+          await book(event.id, attendee.id)
+        ).json();
+        const path = `/events/${event.id}/bookings/mine`;
+
+        const owner = await call('GET', path, attendee.id);
+        assert.equal(owner.status, 200);
+        assert.deepEqual(await owner.json(), {
+          data: { id: booking.id, status: 'CONFIRMED' },
+        });
+        assert.equal(owner.headers.get('cache-control'), 'no-store');
+
+        assert.deepEqual(
+          await (await call('GET', path, secondAttendee.id)).json(),
+          { data: null }
+        );
+        assert.equal((await call('GET', path)).status, 401);
+        assert.equal(
+          (await call('GET', '/events/invalid/bookings/mine', attendee.id))
+            .status,
+          404
+        );
+
+        await call('POST', `/bookings/${booking.id}/cancel`, attendee.id);
+        assert.deepEqual(await (await call('GET', path, attendee.id)).json(), {
+          data: null,
+        });
+      }
+    );
+
+    await t.test(
       'rejects closed, paid, draft, hidden, and unknown events',
       async () => {
         const closed = await createEvent({

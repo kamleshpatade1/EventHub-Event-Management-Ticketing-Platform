@@ -171,6 +171,20 @@ test(
           await prisma.payment.count({ where: { bookingId: booking.id } }),
           1
         );
+
+        const accessToken = await tokenFor(attendee.id);
+        const lookup = () =>
+          fetch(`${baseUrl}/api/events/${event.id}/bookings/mine`, {
+            headers: { cookie: `accessToken=${accessToken}` },
+          });
+        assert.deepEqual(await (await lookup()).json(), {
+          data: { id: booking.id, status: 'PENDING_PAYMENT' },
+        });
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { holdExpiresAt: new Date(Date.now() - 1000) },
+        });
+        assert.deepEqual(await (await lookup()).json(), { data: null });
       }
     );
 

@@ -63,19 +63,27 @@ const paidBookingSelect = {
   ticketCode: true,
 };
 
+function reopenableBookingWhere(eventId, userId, now) {
+  return {
+    eventId,
+    userId,
+    OR: [
+      { status: 'CONFIRMED' },
+      { status: 'PENDING_PAYMENT', holdExpiresAt: { gt: now } },
+    ],
+  };
+}
+
+export function getUserEventBooking(eventId, userId) {
+  return prisma.booking.findFirst({
+    where: reopenableBookingWhere(eventId, userId, new Date()),
+    select: { id: true, status: true },
+  });
+}
+
 function findActivePaidBooking(client, eventId, userId, now) {
   return client.booking.findFirst({
-    where: {
-      eventId,
-      userId,
-      OR: [
-        { status: 'CONFIRMED' },
-        {
-          status: 'PENDING_PAYMENT',
-          holdExpiresAt: { gt: now },
-        },
-      ],
-    },
+    where: reopenableBookingWhere(eventId, userId, now),
     select: {
       ...paidBookingSelect,
       payment: { select: paymentSelect },

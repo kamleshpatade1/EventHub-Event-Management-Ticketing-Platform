@@ -226,31 +226,32 @@ Base prefix: `/api`. “Owner” is checked against the authenticated user, neve
 
 ### Discovery and organizer events
 
-| Method | Route                                      | Access           | Input / result                                                         |
-| ------ | ------------------------------------------ | ---------------- | ---------------------------------------------------------------------- |
-| GET    | `/api/events`                              | Public           | `q,category,city,from,to,pricing,page,limit` → upcoming visible events |
-| GET    | `/api/events/:eventId`                     | Public           | Safe event detail; no attendee details                                 |
-| GET    | `/api/organizer/events`                    | Organizer        | Own events, pagination, aggregate booking/check-in counts              |
-| POST   | `/api/organizer/events`                    | Organizer        | Event fields → new draft; owner from session                           |
-| GET    | `/api/organizer/events/:eventId`           | Owning organizer | Management detail including draft/hidden state                         |
-| PATCH  | `/api/organizer/events/:eventId`           | Owning organizer | Allowlisted editable fields; enforce booking/edit restrictions         |
-| POST   | `/api/organizer/events/:eventId/publish`   | Owning organizer | Validate draft → published; repeated publish returns current state     |
-| POST   | `/api/organizer/events/:eventId/cancel`    | Owning organizer | `{reason}` → cancelled; reject paid event with active holds/tickets    |
-| DELETE | `/api/organizer/events/:eventId`           | Owning organizer | Delete unused draft only; never delete financial/history records       |
-| GET    | `/api/organizer/events/:eventId/attendees` | Owning organizer | `q,checkedIn,page,limit` → minimum attendee fields                     |
+| Method | Route                                      | Access           | Input / result                                                                                                                 |
+| ------ | ------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/api/events`                              | Public           | `q,category,city,from,to,pricing,page,limit` → upcoming visible events                                                         |
+| GET    | `/api/events/:eventId`                     | Public           | Safe event detail; no attendee details                                                                                         |
+| GET    | `/api/organizer/events`                    | Organizer        | Own events, pagination, aggregate booking/check-in counts                                                                      |
+| POST   | `/api/organizer/events`                    | Organizer        | Event fields → new draft; owner from session                                                                                   |
+| GET    | `/api/organizer/events/:eventId`           | Owning organizer | Management detail including draft/hidden state                                                                                 |
+| PATCH  | `/api/organizer/events/:eventId`           | Owning organizer | Allowlisted editable fields; enforce booking/edit restrictions                                                                 |
+| POST   | `/api/organizer/events/:eventId/publish`   | Owning organizer | Validate draft → published; repeated publish returns current state                                                             |
+| POST   | `/api/organizer/events/:eventId/cancel`    | Owning organizer | `{reason}` → cancelled; reject paid event with active holds/tickets                                                            |
+| DELETE | `/api/organizer/events/:eventId`           | Owning organizer | Delete unused draft only; never delete financial/history records                                                               |
+| GET    | `/api/organizer/events/:eventId/attendees` | Owning organizer | `search,checkedIn,page,limit` → confirmed attendees. Search by name or full booking ID. `checkedIn` accepts `true` or `false`. |
 
 ### Bookings, checkout, tickets
 
 | Method | Route                                      | Access             | Input / result                                                                                                       |
 | ------ | ------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/api/events/:eventId/bookings`            | Signed in          | No price/role/user ID input; creates free confirmation or paid reservation; returns existing active booking on retry |
+| GET    | `/api/events/:eventId/bookings/mine`       | Signed in          | Own confirmed booking or unexpired reservation as `{id, status}`, or `null` in `data`                                |
 | GET    | `/api/bookings`                            | Signed in          | Own bookings; optional status filter and pagination                                                                  |
 | GET    | `/api/bookings/:bookingId`                 | Booking owner      | Booking/event snapshot and safe payment state                                                                        |
 | POST   | `/api/bookings/:bookingId/cancel`          | Booking owner      | Free confirmed booking before start/check-in only; repeated cancellation is safe                                     |
 | POST   | `/api/bookings/:bookingId/checkout`        | Booking owner      | Create/reuse checkout URL for open paid reservation; no client amount accepted                                       |
 | POST   | `/api/bookings/:bookingId/reconcile`       | Booking owner      | Rate-limited provider status retrieval; uses shared confirmation/expiry transitions                                  |
 | GET    | `/api/bookings/:bookingId/ticket`          | Booking owner      | Confirmed valid ticket only; other states return conflict                                                            |
-| POST   | `/api/organizer/events/:eventId/check-ins` | Owning organizer   | `{ticketCode}` → original/new checked-in timestamp                                                                   |
+| POST   | `/api/organizer/events/:eventId/check-ins` | Owning organizer   | `{ticketCode}` or `{bookingId}` → original/new checked-in timestamp                                                  |
 | POST   | `/api/payments/webhook`                    | Provider signature | Raw provider payload; verify signature, amount, identifiers, and process once                                        |
 
 ### Admin and operations

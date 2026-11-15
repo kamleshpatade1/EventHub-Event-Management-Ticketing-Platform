@@ -6,6 +6,7 @@ import {
   createPaidBooking,
   getBooking,
   getBookingTicket,
+  getEventBooking,
   listBookings,
   paymentWebhook,
   processTestCheckout,
@@ -29,6 +30,7 @@ router.post(
   processTestCheckout
 );
 router.post('/bookings/:bookingId/reconcile', requireAuth, reconcilePayment);
+router.get('/events/:eventId/bookings/mine', requireAuth, getEventBooking);
 router.post('/events/:eventId/bookings', requireAuth, createBooking);
 router.post('/events/:eventId/bookings/paid', requireAuth, createPaidBooking);
 router.post('/payments/webhook', paymentWebhook);

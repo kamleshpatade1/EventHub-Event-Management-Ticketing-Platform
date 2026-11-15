@@ -4,6 +4,7 @@ import {
   createPaidBooking as createPaidBookingReservation,
   getUserBooking,
   getUserBookingTicket,
+  getUserEventBooking,
   listUserBookings,
 } from '../services/booking.service.js';
 import {
@@ -16,6 +17,20 @@ import { HttpError } from '../lib/errors.js';
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getEventBooking(req, res) {
+  const { eventId } = req.params;
+  if (!uuidPattern.test(eventId)) {
+    throw new HttpError(
+      404,
+      'EVENT_UNAVAILABLE',
+      'Event not found or unavailable.'
+    );
+  }
+
+  const booking = await getUserEventBooking(eventId, req.user.id);
+  return res.set('Cache-Control', 'no-store').json({ data: booking });
+}
 
 export async function createBooking(req, res) {
   const { eventId } = req.params;

@@ -183,6 +183,10 @@ test(
     }
 
     async function checkIn(eventId, ticketCode, userId = organizer.id) {
+      return submitCheckIn(eventId, { ticketCode }, userId);
+    }
+
+    async function submitCheckIn(eventId, body, userId = organizer.id) {
       return fetch(`${baseUrl}/api/organizer/events/${eventId}/check-ins`, {
         method: 'POST',
         headers: {
@@ -190,7 +194,7 @@ test(
           origin: baseUrl,
           cookie: `accessToken=${await tokenFor(userId)}`,
         },
-        body: JSON.stringify({ ticketCode }),
+        body: JSON.stringify(body),
       });
     }
 
@@ -384,13 +388,73 @@ test(
     );
 
     await t.test(
-      'records exactly one check-in for simultaneous scans',
+      'row check-in rejects foreign, hidden, closed, and invalid tickets',
+      async () => {
+        const event = await createEvent();
+        const booking = await createBooking(event.id, randomUUID());
+        const row = { bookingId: booking.id };
+        const otherEvent = await createEvent();
+        assert.equal((await submitCheckIn(otherEvent.id, row)).status, 404);
+        assert.equal(
+          (await submitCheckIn(event.id, row, otherOrganizer.id)).status,
+          404
+        );
+        assert.equal(
+          (await submitCheckIn(event.id, row, attendee.id)).status,
+          403
+        );
+        assert.equal(
+          (await submitCheckIn(event.id, { bookingId: 'invalid' })).status,
+          400
+        );
+        assert.equal(
+          (
+            await submitCheckIn(event.id, {
+              ...row,
+              ticketCode: booking.ticketCode,
+            })
+          ).status,
+          400
+        );
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: { hiddenAt: new Date() },
+        });
+        assert.equal((await submitCheckIn(event.id, row)).status, 404);
+        await prisma.event.update({
+          where: { id: event.id },
+          data: {
+            hiddenAt: null,
+            startAt: new Date(Date.now() + 2 * 60 * 60_000),
+            endAt: new Date(Date.now() + 3 * 60 * 60_000),
+          },
+        });
+        const closed = await submitCheckIn(event.id, row);
+        assert.equal(closed.status, 409);
+        assert.equal((await closed.json()).error.code, 'CHECK_IN_CLOSED');
+
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { ticketCode: null },
+        });
+        const noTicket = await submitCheckIn(event.id, row);
+        assert.equal(noTicket.status, 409);
+        assert.equal(
+          (await noTicket.json()).error.code,
+          'TICKET_NOT_CONFIRMED'
+        );
+      }
+    );
+
+    await t.test(
+      'records exactly one check-in across simultaneous code and row requests',
       async () => {
         const event = await createEvent();
         const booking = await createBooking(event.id, randomUUID());
         const responses = await Promise.all([
           checkIn(event.id, booking.ticketCode),
-          checkIn(event.id, booking.ticketCode),
+          submitCheckIn(event.id, { bookingId: booking.id }),
         ]);
         const bodies = await Promise.all(
           responses.map((response) => response.json())
@@ -928,6 +992,63 @@ test(
           bookingId: booking.id,
           checkedInAt: null,
         });
+      }
+    );
+    await t.test(
+      'attendee search matches exact booking IDs and combines check-in status with pagination',
+      async () => {
+        const event = await createEvent();
+        const booking = await createBooking(event.id);
+        const otherTicket = await prisma.booking.create({
+          data: {
+            userId: otherOrganizer.id,
+            eventId: event.id,
+            status: 'CONFIRMED',
+            checkedInAt: new Date(),
+            amountMinor: 0,
+            currency: 'USD',
+            eventSnapshot: { title: event.title },
+            ticketCode: randomUUID(),
+          },
+        });
+        createdBookingIds.push(otherTicket.id);
+
+        const path = `/api/organizer/events/${event.id}/attendees`;
+        const byId = await (
+          await request(
+            `${path}?search=${booking.id.toUpperCase()}&checkedIn=false&page=1&limit=1`
+          )
+        ).json();
+        assert.deepEqual(byId.pagination, { page: 1, limit: 1, total: 1 });
+        assert.deepEqual(
+          byId.data.map(({ bookingId }) => bookingId),
+          [booking.id]
+        );
+        const checkedIn = await (
+          await request(`${path}?checkedIn=true&limit=1`)
+        ).json();
+        assert.deepEqual(
+          checkedIn.data.map(({ bookingId }) => bookingId),
+          [otherTicket.id]
+        );
+        const noMatch = await (
+          await request(`${path}?search=${booking.id}&checkedIn=true`)
+        ).json();
+        assert.deepEqual(noMatch.data, []);
+        const nextPage = await (
+          await request(`${path}?checkedIn=false&page=2&limit=1`)
+        ).json();
+        assert.equal(nextPage.pagination.total, 1);
+        assert.deepEqual(nextPage.data, []);
+        assert.equal((await request(`${path}?checkedIn=invalid`)).status, 400);
+        assert.equal(
+          (
+            await request(`${path}?checkedIn=true`, {
+              userId: otherOrganizer.id,
+            })
+          ).status,
+          404
+        );
       }
     );
   }

@@ -83,7 +83,8 @@ function formatPrice(event) {
 
 export default function EventDetails() {
   const { eventId } = useParams();
-  const { isAuthenticated, loading: authLoading, setUser } = useAuth();
+  const { isAuthenticated, loading: authLoading, setUser, user } = useAuth();
+  const userId = user?.id;
   const location = useLocation();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
@@ -93,8 +94,35 @@ export default function EventDetails() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [bookingRequiresSignIn, setBookingRequiresSignIn] = useState(false);
+  const [bookingLookup, setBookingLookup] = useState(null);
   const bookingLock = useRef(false);
   const eventUrl = `${location.pathname}${location.search}${location.hash}`;
+  const currentLookup =
+    userId &&
+    bookingLookup?.userId === userId &&
+    bookingLookup.eventId === eventId
+      ? bookingLookup
+      : null;
+  const existingBooking = currentLookup?.booking;
+  const checkingBooking = Boolean(userId && !currentLookup);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const controller = new AbortController();
+    api(`/events/${encodeURIComponent(eventId)}/bookings/mine`, {
+      signal: controller.signal,
+    })
+      .then(({ data }) => {
+        if (!controller.signal.aborted)
+          setBookingLookup({ eventId, userId, booking: data });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setBookingLookup({ eventId, userId, failed: true });
+      });
+    return () => controller.abort();
+  }, [eventId, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +170,14 @@ export default function EventDetails() {
   }, [event]);
 
   async function handleBooking() {
-    if (bookingLock.current || bookingLoading || authLoading) return;
+    if (
+      bookingLock.current ||
+      bookingLoading ||
+      authLoading ||
+      checkingBooking ||
+      existingBooking
+    )
+      return;
 
     if (!isAuthenticated) {
       navigate('/login', { state: { from: eventUrl } });
@@ -411,7 +446,12 @@ export default function EventDetails() {
               aria-live="polite"
               className="mt-4 text-sm font-medium text-gray-300"
             >
-              Booking status: {bookingStateLabel}
+              Booking status:{' '}
+              {existingBooking
+                ? existingBooking.status === 'PENDING_PAYMENT'
+                  ? 'Awaiting payment'
+                  : 'Already booked'
+                : bookingStateLabel}
             </p>
 
             {isEventPaid(event) && (
@@ -422,7 +462,21 @@ export default function EventDetails() {
               </p>
             )}
 
-            {bookingState.canBook ? (
+            {existingBooking ? (
+              <Link
+                to={`/bookings/${encodeURIComponent(existingBooking.id)}`}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-3 font-semibold hover:bg-purple-500"
+              >
+                View booking <Ticket className="h-4 w-4" />
+              </Link>
+            ) : checkingBooking ? (
+              <p
+                role="status"
+                className="mt-6 text-center text-sm text-gray-300"
+              >
+                Checking your booking…
+              </p>
+            ) : bookingState.canBook ? (
               <button
                 type="button"
                 onClick={handleBooking}
@@ -446,10 +500,23 @@ export default function EventDetails() {
               </button>
             )}
 
-            {bookingState.status === 'sold_out' && (
-              <p role="alert" className="mt-3 text-center text-sm text-red-300">
-                This event is sold out.
-              </p>
+            {!existingBooking &&
+              !checkingBooking &&
+              bookingState.status === 'sold_out' && (
+                <p
+                  role="alert"
+                  className="mt-3 text-center text-sm text-red-300"
+                >
+                  This event is sold out.
+                </p>
+              )}
+            {currentLookup?.failed && (
+              <Link
+                to="/my-bookings"
+                className="mt-3 block text-center text-sm text-purple-300 underline"
+              >
+                Check my bookings
+              </Link>
             )}
             {bookingError && (
               <p role="alert" className="mt-3 text-sm leading-5 text-red-300">
@@ -466,9 +533,11 @@ export default function EventDetails() {
               </p>
             )}
 
-            <p className="mt-3 text-center text-xs leading-5 text-gray-500">
-              Booking and payment availability are confirmed in the next step.
-            </p>
+            {!existingBooking && !checkingBooking && bookingState.canBook && (
+              <p className="mt-3 text-center text-xs leading-5 text-gray-500">
+                Booking and payment availability are confirmed in the next step.
+              </p>
+            )}
           </div>
         </aside>
       </section>

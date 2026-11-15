@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { lockEvent } from '../lib/event-lock.js';
 import { HttpError } from '../lib/errors.js';
@@ -544,17 +545,31 @@ export async function listOrganizerAttendees(eventId, organizerId, query = {}) {
     );
   }
 
+  const { checkedIn } = query;
+  if (
+    checkedIn !== undefined &&
+    checkedIn !== 'true' &&
+    checkedIn !== 'false'
+  ) {
+    throw new HttpError(
+      400,
+      'INVALID_QUERY',
+      'checkedIn must be true or false.'
+    );
+  }
+
   const where = {
     eventId: event.id,
     status: 'CONFIRMED',
+    ...(checkedIn !== undefined && {
+      checkedInAt: checkedIn === 'true' ? { not: null } : null,
+    }),
     ...(search
       ? {
-          user: {
-            name: {
-              contains: search,
-              mode: 'insensitive',
-            },
-          },
+          OR: [
+            { user: { name: { contains: search, mode: 'insensitive' } } },
+            ...(UUID_REGEX.test(search) ? [{ id: search }] : []),
+          ],
         }
       : {}),
   };
@@ -592,8 +607,18 @@ export async function checkInOrganizerTicket(eventId, organizerId, body) {
 
   const ticketCode =
     typeof body.ticketCode === 'string' ? body.ticketCode.trim() : '';
-
-  if (ticketCode === '' || ticketCode.length > 64) {
+  const { bookingId } = body;
+  if (bookingId !== undefined) {
+    if (
+      body.ticketCode !== undefined ||
+      typeof bookingId !== 'string' ||
+      !UUID_REGEX.test(bookingId)
+    ) {
+      invalidInput('Provide one valid booking ID or a ticket code.', {
+        bookingId: 'Use a booking UUID without a ticket code.',
+      });
+    }
+  } else if (ticketCode === '' || ticketCode.length > 64) {
     invalidInput('Please provide a valid ticket code.', {
       ticketCode: 'Must be a non-empty string of at most 64 characters.',
     });
@@ -629,26 +654,16 @@ export async function checkInOrganizerTicket(eventId, organizerId, body) {
       );
     }
 
-    const lockedBookings = await tx.$queryRaw`
-      SELECT "id"
+    const selector = bookingId
+      ? Prisma.sql`"id" = ${bookingId}::uuid`
+      : Prisma.sql`"ticketCode" = ${ticketCode}`;
+    const [booking] = await tx.$queryRaw`
+      SELECT "id", "status"::text AS "status", "checkedInAt",
+        "ticketCode" IS NOT NULL AS "hasTicket"
       FROM "Booking"
-      WHERE "ticketCode" = ${ticketCode}
-        AND "eventId" = ${eventId}::uuid
+      WHERE "eventId" = ${eventId}::uuid AND ${selector}
       FOR UPDATE
     `;
-
-    if (lockedBookings.length === 0) {
-      throw new HttpError(
-        404,
-        'TICKET_NOT_FOUND',
-        'Ticket not found for this event.'
-      );
-    }
-
-    const booking = await tx.booking.findFirst({
-      where: { ticketCode, eventId },
-      select: { id: true, status: true, checkedInAt: true },
-    });
 
     if (!booking) {
       throw new HttpError(
@@ -658,7 +673,7 @@ export async function checkInOrganizerTicket(eventId, organizerId, body) {
       );
     }
 
-    if (booking.status !== 'CONFIRMED') {
+    if (booking.status !== 'CONFIRMED' || !booking.hasTicket) {
       throw new HttpError(
         409,
         'TICKET_NOT_CONFIRMED',
