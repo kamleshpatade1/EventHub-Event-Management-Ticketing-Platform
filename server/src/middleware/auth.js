@@ -1,22 +1,25 @@
-import jwt from 'jsonwebtoken';
 import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
+import { readAccessSession } from '../services/auth.service.js';
 
 export async function requireAuth(req, res, next) {
-  let payload;
-  try {
-    payload = jwt.verify(
-      req.cookies?.accessToken,
-      process.env.JWT_ACCESS_SECRET
-    );
-  } catch {
-    throw new HttpError(401, 'UNAUTHENTICATED', 'Please log in.');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.id },
-    select: { id: true, name: true, email: true, role: true },
-  });
+  const session = readAccessSession(req.cookies?.accessToken);
+  const user =
+    session &&
+    (await prisma.user.findFirst({
+      where: {
+        id: session.id,
+        refreshTokens: {
+          some: {
+            familyId: session.familyId,
+            usedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        },
+      },
+      select: { id: true, name: true, email: true, role: true },
+    }));
   if (!user) throw new HttpError(401, 'UNAUTHENTICATED', 'Please log in.');
 
   req.user = user;

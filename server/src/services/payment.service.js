@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { prisma } from '../db.js';
+import { lockEvent } from '../lib/event-lock.js';
 import { HttpError } from '../lib/errors.js';
 import {
   createTestCheckoutSession,
@@ -25,15 +26,6 @@ const testCheckoutIdPattern =
 
 function notFound() {
   throw new HttpError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');
-}
-
-function lockEvent(tx, eventId) {
-  return tx.$queryRaw`
-    SELECT "id"
-    FROM "Event"
-    WHERE "id" = ${eventId}::uuid
-    FOR UPDATE
-  `;
 }
 
 function lockBooking(tx, bookingId) {

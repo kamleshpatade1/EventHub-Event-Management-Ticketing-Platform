@@ -68,15 +68,20 @@ test(
       return entry.split(';', 1)[0];
     }
 
-    async function post(path, body, cookie) {
+    async function post(path, body, cookie, origin = baseUrl) {
       return fetch(`${baseUrl}${path}`, {
         method: 'POST',
         headers: {
+          ...(origin ? { origin } : {}),
           'content-type': 'application/json',
           ...(cookie ? { cookie } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
+    }
+
+    function me(cookie) {
+      return fetch(`${baseUrl}/api/auth/me`, { headers: { cookie } });
     }
 
     t.after(async () => {
@@ -104,6 +109,10 @@ test(
     });
     assert.equal(loggedIn.status, 200);
     const loginRefreshCookie = cookiePair(loggedIn, 'refreshToken');
+    const loginAccessCookie = cookiePair(loggedIn, 'accessToken');
+    const authenticated = await me(loginAccessCookie);
+    assert.equal(authenticated.status, 200);
+    assert.equal(authenticated.headers.get('cache-control'), 'no-store');
 
     const loginToken = loginRefreshCookie.slice('refreshToken='.length);
     const loginTokenHash = (await import('node:crypto')).default
@@ -119,6 +128,7 @@ test(
     );
     assert.equal(refreshed.status, 200);
     const replacementRefreshCookie = cookiePair(refreshed, 'refreshToken');
+    const replacementAccessCookie = cookiePair(refreshed, 'accessToken');
 
     const oldToken = originalRefreshCookie.slice('refreshToken='.length);
     const oldTokenHash = crypto
@@ -155,12 +165,25 @@ test(
     });
     assert.ok(reusedFamily.length >= 2);
     assert.ok(reusedFamily.every((token) => token.revokedAt));
+    assert.equal((await me(replacementAccessCookie)).status, 401);
+    assert.equal((await me(loginAccessCookie)).status, 200);
 
     // Logout revokes the whole family and returns 204.
     const loginRecord = await prisma.refreshToken.findUnique({
       where: { tokenHash: loginTokenHash },
     });
     assert.ok(loginRecord);
+
+    for (const origin of ['https://untrusted.example', null]) {
+      const rejected = await post(
+        '/api/auth/logout',
+        undefined,
+        loginRefreshCookie,
+        origin
+      );
+      assert.equal(rejected.status, 403);
+      assert.equal((await me(loginAccessCookie)).status, 200);
+    }
 
     const loggedOut = await post(
       '/api/auth/logout',
@@ -169,11 +192,37 @@ test(
     );
     assert.equal(loggedOut.status, 204);
     assert.equal(await loggedOut.text(), '');
+    assert.equal((await me(loginAccessCookie)).status, 401);
 
     const logoutFamily = await prisma.refreshToken.findMany({
       where: { familyId: loginRecord.familyId },
     });
     assert.ok(logoutFamily.length >= 1);
     assert.ok(logoutFamily.every((token) => token.revokedAt));
+
+    const racingLogin = await post('/api/auth/login', {
+      email,
+      password: 'password123',
+    });
+    const racingAccess = cookiePair(racingLogin, 'accessToken');
+    const racingRefresh = cookiePair(racingLogin, 'refreshToken');
+    const [rotation, logout] = await Promise.all([
+      post('/api/auth/refresh', undefined, racingRefresh),
+      post('/api/auth/logout', undefined, racingRefresh),
+    ]);
+
+    assert.equal(logout.status, 204);
+    assert.equal((await me(racingAccess)).status, 401);
+    if (rotation.ok) {
+      assert.equal((await me(cookiePair(rotation, 'accessToken'))).status, 401);
+      const replay = await post(
+        '/api/auth/refresh',
+        undefined,
+        cookiePair(rotation, 'refreshToken')
+      );
+      assert.equal(replay.status, 401);
+    } else {
+      assert.equal(rotation.status, 401);
+    }
   }
 );

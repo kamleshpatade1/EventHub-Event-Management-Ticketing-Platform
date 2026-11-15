@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import jwt from 'jsonwebtoken';
+import { createTestAccessToken } from './fixtures/session.js';
+import { setTimeout as delay } from 'node:timers/promises';
 
 process.env.JWT_ACCESS_SECRET ||= 'organizer-integration-test-secret';
 
@@ -178,17 +179,16 @@ test(
     }
 
     function tokenFor(userId = organizer.id) {
-      return jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, {
-        expiresIn: '5m',
-      });
+      return createTestAccessToken(prisma, userId);
     }
 
-    function checkIn(eventId, ticketCode, userId = organizer.id) {
+    async function checkIn(eventId, ticketCode, userId = organizer.id) {
       return fetch(`${baseUrl}/api/organizer/events/${eventId}/check-ins`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          cookie: `accessToken=${tokenFor(userId)}`,
+          origin: baseUrl,
+          cookie: `accessToken=${await tokenFor(userId)}`,
         },
         body: JSON.stringify({ ticketCode }),
       });
@@ -251,7 +251,8 @@ test(
             method: 'POST',
             headers: {
               'content-type': 'application/json',
-              cookie: `accessToken=${tokenFor()}`,
+              origin: baseUrl,
+              cookie: `accessToken=${await tokenFor()}`,
             },
             body: JSON.stringify(
               ticketCode === undefined ? {} : { ticketCode }
@@ -481,9 +482,7 @@ test(
     createdUserIds.push(organizer.id, otherOrganizer.id, attendee.id);
 
     function tokenFor(userId = organizer.id) {
-      return jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, {
-        expiresIn: '5m',
-      });
+      return createTestAccessToken(prisma, userId);
     }
 
     async function request(path, { userId = organizer.id, ...options } = {}) {
@@ -491,7 +490,8 @@ test(
         ...(options.body === undefined
           ? {}
           : { 'content-type': 'application/json' }),
-        cookie: `accessToken=${tokenFor(userId)}`,
+        origin: baseUrl,
+        cookie: `accessToken=${await tokenFor(userId)}`,
         ...options.headers,
       };
 
@@ -550,9 +550,10 @@ test(
 
     async function createBooking(
       eventId,
-      { status = 'CONFIRMED', amountMinor = 0, ticketCode = randomUUID() } = {}
+      { status = 'CONFIRMED', amountMinor = 0, ticketCode = randomUUID() } = {},
+      client = prisma
     ) {
-      const booking = await prisma.booking.create({
+      const booking = await client.booking.create({
         data: {
           userId: attendee.id,
           eventId,
@@ -704,7 +705,7 @@ test(
     });
 
     await t.test(
-      'locks price, capacity, and dates for published events with bookings',
+      'locks buyer-facing terms for published events with active bookings',
       async () => {
         const event = await createEvent();
         await createBooking(event.id);
@@ -713,6 +714,9 @@ test(
           { priceMinor: 100 },
           { capacity: 6 },
           { startAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString() },
+          { currency: 'INR' },
+          { venue: 'Changed venue' },
+          { title: 'Updated title' },
         ]) {
           const response = await request(`/api/organizer/events/${event.id}`, {
             method: 'PATCH',
@@ -722,14 +726,112 @@ test(
           assert.equal((await response.json()).error.code, 'EVENT_EDIT_LOCKED');
         }
 
-        const nonLockedResponse = await request(
+        await prisma.booking.updateMany({
+          where: { eventId: event.id },
+          data: { status: 'CANCELLED', ticketCode: null },
+        });
+        const historicalOnlyResponse = await request(
           `/api/organizer/events/${event.id}`,
           {
             method: 'PATCH',
             body: { title: 'Updated title' },
           }
         );
-        assert.equal(nonLockedResponse.status, 200);
+        assert.equal(historicalOnlyResponse.status, 200);
+      }
+    );
+
+    // Stage a ticket under the same row lock as booking, then start the
+    // organizer request before the ticket is visible to other transactions.
+    async function raceWithBooking(event, mutate) {
+      let response;
+      const booking = await prisma.$transaction(async (tx) => {
+        const [{ pid }] = await tx.$queryRaw`SELECT pg_backend_pid() AS pid`;
+        await tx.$queryRaw`
+          SELECT "id" FROM "Event" WHERE "id" = ${event.id}::uuid FOR UPDATE
+        `;
+        const staged = await createBooking(
+          event.id,
+          { amountMinor: event.priceMinor },
+          tx
+        );
+        response = mutate();
+
+        for (let attempt = 0; attempt < 150; attempt += 1) {
+          const [{ blocked }] = await prisma.$queryRaw`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_stat_activity
+              WHERE wait_event_type = 'Lock'
+                AND ${pid}::integer = ANY(pg_blocking_pids(pid))
+            ) AS blocked
+          `;
+          if (blocked) return staged;
+          await delay(20);
+        }
+        assert.fail(
+          'Expected the organizer operation to wait for the event lock'
+        );
+      });
+
+      return { booking, response: await response };
+    }
+
+    await t.test(
+      'an edit waiting on a new booking sees the committed ticket',
+      async () => {
+        const event = await createEvent();
+        const { response } = await raceWithBooking(event, () =>
+          request(`/api/organizer/events/${event.id}`, {
+            method: 'PATCH',
+            body: { priceMinor: 2500 },
+          })
+        );
+        assert.equal(response.status, 409);
+        assert.equal((await response.json()).error.code, 'EVENT_EDIT_LOCKED');
+        const current = await prisma.event.findUniqueOrThrow({
+          where: { id: event.id },
+        });
+        assert.equal(current.priceMinor, event.priceMinor);
+      }
+    );
+
+    await t.test(
+      'cancellation waiting on a free booking invalidates its ticket',
+      async () => {
+        const event = await createEvent();
+        const { booking, response } = await raceWithBooking(event, () =>
+          request(`/api/organizer/events/${event.id}/cancel`, {
+            method: 'POST',
+          })
+        );
+        assert.equal(response.status, 200);
+        const current = await prisma.booking.findUniqueOrThrow({
+          where: { id: booking.id },
+        });
+        assert.equal(current.status, 'CANCELLED');
+        assert.equal(current.ticketCode, null);
+      }
+    );
+
+    await t.test(
+      'cancellation waiting on a paid booking leaves it intact',
+      async () => {
+        const event = await createEvent({ priceMinor: 2500 });
+        const { booking, response } = await raceWithBooking(event, () =>
+          request(`/api/organizer/events/${event.id}/cancel`, {
+            method: 'POST',
+          })
+        );
+        assert.equal(response.status, 409);
+        assert.equal(
+          (await response.json()).error.code,
+          'PAID_EVENT_HAS_BOOKINGS'
+        );
+        const current = await prisma.booking.findUniqueOrThrow({
+          where: { id: booking.id },
+        });
+        assert.equal(current.status, 'CONFIRMED');
+        assert.equal(current.ticketCode, booking.ticketCode);
       }
     );
 

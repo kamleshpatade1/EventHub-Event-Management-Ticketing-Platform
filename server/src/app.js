@@ -11,19 +11,45 @@ import eventRoutes from './routes/event.route.js';
 import bookingRoutes from './routes/booking.route.js';
 
 const app = express();
+const configuredOrigin = process.env.CORS_ORIGIN;
+const browserOrigin = /^https?:\/\/[^/]+$/.test(configuredOrigin ?? '')
+  ? configuredOrigin
+  : false;
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: browserOrigin,
     credentials: true,
   })
 );
 
 app.use('/api/payments/webhook', express.raw({ type: '*/*', limit: '1mb' }));
+app.use(cookieParser());
+app.use('/api', (req, res, next) => {
+  if (
+    ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
+    (req.method === 'POST' && /^\/payments\/webhook\/?$/i.test(req.path))
+  ) {
+    return next();
+  }
+
+  const startsSession = /^\/auth\/(login|register)\/?$/i.test(req.path);
+  if (startsSession || req.cookies.accessToken || req.cookies.refreshToken) {
+    const origin = req.get('Origin');
+    const sameOrigin = `${req.protocol}://${req.get('Host')}`;
+    if (!origin || (origin !== sameOrigin && origin !== browserOrigin)) {
+      throw new HttpError(
+        403,
+        'UNTRUSTED_ORIGIN',
+        'Request origin is not allowed.'
+      );
+    }
+  }
+  next();
+});
 app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true, limit: '16kb' }));
 app.use(express.static('public'));
-app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ data: { status: 'ok' } }));
 

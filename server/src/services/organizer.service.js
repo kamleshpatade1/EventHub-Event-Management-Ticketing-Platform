@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { lockEvent } from '../lib/event-lock.js';
 import { HttpError } from '../lib/errors.js';
 import { parsePagination } from '../lib/pagination.js';
 import { ACTIVE_STATUSES } from './booking.service.js';
@@ -48,14 +49,6 @@ const STRING_LIMITS = {
 };
 
 const DATE_FIELDS = ['startAt', 'endAt', 'registrationClosesAt'];
-
-const LOCKED_FIELDS = [
-  'priceMinor',
-  'capacity',
-  'startAt',
-  'endAt',
-  'registrationClosesAt',
-];
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -247,11 +240,21 @@ async function findOwnedEvent(eventId, organizerId, client = prisma) {
   return event;
 }
 
+async function lockOwnedEvent(tx, eventId, organizerId) {
+  validateEventId(eventId);
+  await lockEvent(tx, eventId);
+  return findOwnedEvent(eventId, organizerId, tx);
+}
+
+function activeEventBookings(eventId) {
+  return { eventId, status: { in: ACTIVE_STATUSES } };
+}
+
 function eventEditLocked() {
   throw new HttpError(
     409,
     'EVENT_EDIT_LOCKED',
-    'Price, capacity and dates cannot be changed after a published event has bookings.'
+    'Published events with active bookings cannot be edited.'
   );
 }
 
@@ -305,6 +308,7 @@ function addCounts(event, counts) {
 
   return {
     ...event,
+    editLocked: event.status === 'PUBLISHED' && count.bookings > 0,
     counts: {
       bookings: count.bookings,
       checkedIn: count.checkedIn,
@@ -331,94 +335,88 @@ export async function createOrganizerEvent(organizerId, body) {
 export async function updateOrganizerEvent(eventId, organizerId, body) {
   validateBody(body);
 
-  const event = await findOwnedEvent(eventId, organizerId);
+  return prisma.$transaction(async (tx) => {
+    const event = await lockOwnedEvent(tx, eventId, organizerId);
 
-  const editableFields = Object.keys(body).filter((field) =>
-    EVENT_FIELDS.includes(field)
-  );
+    if (!Object.keys(body).some((field) => EVENT_FIELDS.includes(field))) {
+      invalidInput('Provide at least one editable event field.');
+    }
 
-  if (editableFields.length === 0) {
-    invalidInput('Provide at least one editable event field.');
-  }
+    if (
+      event.status === 'PUBLISHED' &&
+      (await tx.booking.count({ where: activeEventBookings(event.id) })) > 0
+    ) {
+      eventEditLocked();
+    }
 
-  // Lock price, capacity, and dates for published events with bookings.
-  if (
-    event.status === 'PUBLISHED' &&
-    editableFields.some((field) => LOCKED_FIELDS.includes(field)) &&
-    (await hasAnyBookings(event.id))
-  ) {
-    eventEditLocked();
-  }
+    const data = validateEventFields(body, { partial: true });
+    validateEventDates({ ...event, ...data });
 
-  // Validate fields only after checking the booking lock.
-  const data = validateEventFields(body, { partial: true });
-  validateEventDates({ ...event, ...data });
-
-  return prisma.event.update({
-    where: { id: event.id },
-    data,
+    return tx.event.update({ where: { id: event.id }, data });
   });
 }
 
 export async function publishOrganizerEvent(eventId, organizerId) {
-  const event = await findOwnedEvent(eventId, organizerId);
+  return prisma.$transaction(async (tx) => {
+    const event = await lockOwnedEvent(tx, eventId, organizerId);
 
-  if (event.status !== 'DRAFT') {
-    throw new HttpError(
-      409,
-      'EVENT_NOT_PUBLISHABLE',
-      'Only draft events can be published.'
-    );
-  }
+    if (event.status !== 'DRAFT') {
+      throw new HttpError(
+        409,
+        'EVENT_NOT_PUBLISHABLE',
+        'Only draft events can be published.'
+      );
+    }
 
-  if (event.hiddenAt) {
-    throw new HttpError(
-      409,
-      'EVENT_NOT_PUBLISHABLE',
-      'Hidden events cannot be published.'
-    );
-  }
+    if (event.hiddenAt) {
+      throw new HttpError(
+        409,
+        'EVENT_NOT_PUBLISHABLE',
+        'Hidden events cannot be published.'
+      );
+    }
 
-  const errors = {};
-  const now = new Date();
+    const errors = {};
+    const now = new Date();
 
-  if (event.startAt <= now) {
-    errors.startAt = 'The event start date must be in the future.';
-  }
+    if (event.startAt <= now) {
+      errors.startAt = 'The event start date must be in the future.';
+    }
 
-  if (event.endAt <= event.startAt) {
-    errors.endAt = 'The event end date must be after the start date.';
-  }
+    if (event.endAt <= event.startAt) {
+      errors.endAt = 'The event end date must be after the start date.';
+    }
 
-  if (event.registrationClosesAt > event.startAt) {
-    errors.registrationClosesAt =
-      'Registration deadline cannot be after the event starts.';
-  }
+    if (event.registrationClosesAt > event.startAt) {
+      errors.registrationClosesAt =
+        'Registration deadline cannot be after the event starts.';
+    }
 
-  if (event.capacity < 1 || event.capacity > 2147483647) {
-    errors.capacity =
-      'Capacity must be a positive integer within the allowed limit.';
-  }
+    if (event.capacity < 1 || event.capacity > 2147483647) {
+      errors.capacity =
+        'Capacity must be a positive integer within the allowed limit.';
+    }
 
-  if (
-    !Number.isInteger(event.priceMinor) ||
-    event.priceMinor < 0 ||
-    event.priceMinor > 2147483647
-  ) {
-    errors.priceMinor =
-      'Price must be a non-negative integer within the allowed limit.';
-  }
+    if (
+      !Number.isInteger(event.priceMinor) ||
+      event.priceMinor < 0 ||
+      event.priceMinor > 2147483647
+    ) {
+      errors.priceMinor =
+        'Price must be a non-negative integer within the allowed limit.';
+    }
 
-  if (Object.keys(errors).length > 0) {
-    invalidInput(
-      'Event cannot be published until its fields are corrected.',
-      errors
-    );
-  }
+    if (Object.keys(errors).length > 0) {
+      invalidInput(
+        'Event cannot be published until its fields are corrected.',
+        errors
+      );
+    }
 
-  return prisma.event.update({
-    where: { id: event.id },
-    data: { status: 'PUBLISHED' },
+    return tx.event.update({
+      where: { id: event.id },
+      data: { status: 'PUBLISHED' },
+    });
   });
 }
 
@@ -454,7 +452,7 @@ export async function getOrganizerEvent(eventId, organizerId) {
 
 export async function deleteOrganizerEvent(eventId, organizerId) {
   return prisma.$transaction(async (tx) => {
-    const event = await findOwnedEvent(eventId, organizerId, tx);
+    const event = await lockOwnedEvent(tx, eventId, organizerId);
 
     if (event.status !== 'DRAFT') {
       throw new HttpError(
@@ -480,7 +478,7 @@ export async function deleteOrganizerEvent(eventId, organizerId) {
 
 export async function cancelOrganizerEvent(eventId, organizerId) {
   return prisma.$transaction(async (tx) => {
-    const event = await findOwnedEvent(eventId, organizerId, tx);
+    const event = await lockOwnedEvent(tx, eventId, organizerId);
 
     if (event.status === 'CANCELLED') {
       return event;
@@ -494,25 +492,22 @@ export async function cancelOrganizerEvent(eventId, organizerId) {
       );
     }
 
-    const bookingCount = await tx.booking.count({
-      where: { eventId: event.id },
-    });
-
-    if (event.priceMinor > 0 && bookingCount > 0) {
+    const activeBookings = activeEventBookings(event.id);
+    if (
+      event.priceMinor > 0 &&
+      (await tx.booking.count({ where: activeBookings })) > 0
+    ) {
       throw new HttpError(
         409,
         'PAID_EVENT_HAS_BOOKINGS',
-        'A paid event with bookings cannot be cancelled through this endpoint.'
+        'A paid event with active bookings cannot be cancelled.'
       );
     }
 
     const now = new Date();
 
     await tx.booking.updateMany({
-      where: {
-        eventId: event.id,
-        status: { in: ACTIVE_STATUSES },
-      },
+      where: activeBookings,
       data: {
         status: 'CANCELLED',
         cancelledAt: now,
@@ -605,12 +600,7 @@ export async function checkInOrganizerTicket(eventId, organizerId, body) {
   }
 
   return prisma.$transaction(async (tx) => {
-    const lockedEvents = await tx.$queryRaw`
-      SELECT "id"
-      FROM "Event"
-      WHERE "id" = ${eventId}::uuid
-      FOR UPDATE
-    `;
+    const lockedEvents = await lockEvent(tx, eventId);
 
     if (lockedEvents.length === 0) {
       throw new HttpError(

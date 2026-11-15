@@ -101,6 +101,7 @@ function OrganizerEventForm() {
 
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(editing);
+  const [editLocked, setEditLocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingAction, setSavingAction] = useState('');
   const [error, setError] = useState('');
@@ -133,6 +134,7 @@ function OrganizerEventForm() {
 
         if (!active) return;
 
+        setEditLocked(event.editLocked);
         setForm({
           title: event.title ?? '',
           description: event.description ?? '',
@@ -264,7 +266,7 @@ function OrganizerEventForm() {
     event.preventDefault();
 
     // Prevent multiple submissions before React re-renders.
-    if (submitLock.current) return;
+    if (submitLock.current || editLocked) return;
 
     setError('');
     setNotice('');
@@ -293,6 +295,8 @@ function OrganizerEventForm() {
         navigate,
       });
     } catch (err) {
+      if (err.code === 'EVENT_EDIT_LOCKED') setEditLocked(true);
+
       if (err.workflowStage === 'publish') {
         setError(
           `Your event was saved, but publishing failed. Your changes are preserved. Please retry publishing. ${err.message || ''}`
@@ -318,6 +322,19 @@ function OrganizerEventForm() {
     return (
       <main className="min-h-screen bg-[#0b0b12] p-8 text-white">
         Loading event...
+      </main>
+    );
+  }
+
+  if (editing && editLocked) {
+    return (
+      <main className="min-h-screen bg-[#0b0b12] p-8 text-white">
+        <p role="status" className="mb-4">
+          Editing is locked while this event has active bookings.
+        </p>
+        <Link to={`/organizer/events/${eventId}`} className="underline">
+          Back to event
+        </Link>
       </main>
     );
   }

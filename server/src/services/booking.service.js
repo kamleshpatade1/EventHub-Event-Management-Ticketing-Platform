@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { prisma } from '../db.js';
+import { lockEvent } from '../lib/event-lock.js';
 import { HttpError } from '../lib/errors.js';
 import { parsePagination } from '../lib/pagination.js';
 
@@ -105,20 +106,9 @@ function isActiveBookingConflict(error) {
 }
 
 export async function createFreeBooking(eventId, userId) {
-  const existingBooking = await findActiveBooking(prisma, eventId, userId);
-
-  if (existingBooking) {
-    return { booking: existingBooking, created: false };
-  }
-
   try {
     return await prisma.$transaction(async (tx) => {
-      const lockedEvents = await tx.$queryRaw`
-        SELECT "id"
-        FROM "Event"
-        WHERE "id" = ${eventId}::uuid
-        FOR UPDATE
-      `;
+      const lockedEvents = await lockEvent(tx, eventId);
 
       if (lockedEvents.length === 0) {
         throw new HttpError(
@@ -131,6 +121,12 @@ export async function createFreeBooking(eventId, userId) {
       const event = await tx.event.findUnique({
         where: { id: eventId },
       });
+
+      const currentBooking = await findActiveBooking(tx, eventId, userId);
+
+      if (currentBooking) {
+        return { booking: currentBooking, created: false };
+      }
 
       if (!event || event.status === 'DRAFT' || event.hiddenAt) {
         throw new HttpError(
@@ -146,12 +142,6 @@ export async function createFreeBooking(eventId, userId) {
           'EVENT_UNAVAILABLE',
           'This event has been cancelled.'
         );
-      }
-
-      const currentBooking = await findActiveBooking(tx, eventId, userId);
-
-      if (currentBooking) {
-        return { booking: currentBooking, created: false };
       }
 
       const now = new Date();
@@ -226,12 +216,7 @@ export async function createFreeBooking(eventId, userId) {
 export async function createPaidBooking(eventId, userId) {
   try {
     return await prisma.$transaction(async (tx) => {
-      const lockedEvents = await tx.$queryRaw`
-        SELECT "id"
-        FROM "Event"
-        WHERE "id" = ${eventId}::uuid
-        FOR UPDATE
-      `;
+      const lockedEvents = await lockEvent(tx, eventId);
 
       if (lockedEvents.length === 0) {
         throw new HttpError(
@@ -476,12 +461,7 @@ export async function cancelUserBooking(bookingId, userId) {
   }
 
   return prisma.$transaction(async (tx) => {
-    const lockedEvents = await tx.$queryRaw`
-      SELECT "id"
-      FROM "Event"
-      WHERE "id" = ${bookingReference.eventId}::uuid
-      FOR UPDATE
-    `;
+    const lockedEvents = await lockEvent(tx, bookingReference.eventId);
 
     if (lockedEvents.length === 0) {
       throw new HttpError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');

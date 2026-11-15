@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import jwt from 'jsonwebtoken';
+import { createTestAccessToken } from './fixtures/session.js';
 
 process.env.JWT_ACCESS_SECRET ||= 'paid-booking-integration-test-secret';
 
@@ -122,17 +122,16 @@ test(
     }
 
     function tokenFor(userId) {
-      return jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, {
-        expiresIn: '5m',
-      });
+      return createTestAccessToken(prisma, userId);
     }
 
-    function reserve(eventId, userId, body = {}) {
+    async function reserve(eventId, userId, body = {}) {
       return fetch(`${baseUrl}/api/events/${eventId}/bookings/paid`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          cookie: `accessToken=${tokenFor(userId)}`,
+          origin: baseUrl,
+          cookie: `accessToken=${await tokenFor(userId)}`,
         },
         body: JSON.stringify(body),
       });

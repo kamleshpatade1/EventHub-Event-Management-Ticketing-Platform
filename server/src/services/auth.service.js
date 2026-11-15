@@ -12,8 +12,8 @@ const bcryptRounds = (() => {
 const hashToken = (token) =>
   crypto.createHash('sha256').update(token).digest('hex');
 
-const generateAccessToken = (user) =>
-  jwt.sign({ id: user.id, role: user.role }, process.env.JWT_ACCESS_SECRET, {
+const generateAccessToken = (user, familyId) =>
+  jwt.sign({ id: user.id, familyId }, process.env.JWT_ACCESS_SECRET, {
     expiresIn: '15m',
   });
 
@@ -31,11 +31,15 @@ const publicUser = (user) => ({
   role: user.role,
 });
 
-async function createSession(user, familyId = crypto.randomUUID()) {
-  const accessToken = generateAccessToken(user);
+async function createSession(
+  user,
+  familyId = crypto.randomUUID(),
+  client = prisma
+) {
+  const accessToken = generateAccessToken(user, familyId);
   const refreshToken = generateRefreshToken(user);
 
-  await prisma.refreshToken.create({
+  await client.refreshToken.create({
     data: {
       userId: user.id,
       familyId,
@@ -146,124 +150,98 @@ export async function loginUser({ email, password } = {}) {
   return createSession(user);
 }
 
-export async function refreshSession(token) {
+function verifyToken(token, secret) {
   try {
-    if (!token) {
-      throw new HttpError(
-        401,
-        'INVALID_REFRESH_TOKEN',
-        'Refresh token is required.'
-      );
-    }
+    return jwt.verify(token, secret, { algorithms: ['HS256'] });
+  } catch {
+    return null;
+  }
+}
 
-    const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+export function readAccessSession(token) {
+  const payload = verifyToken(token, process.env.JWT_ACCESS_SECRET);
+  return payload?.id && payload?.familyId ? payload : null;
+}
 
-    if (!payload.id || !payload.jti) {
-      throw new HttpError(
-        401,
-        'INVALID_REFRESH_TOKEN',
-        'Refresh token is invalid.'
-      );
-    }
+// Serialize rotation and revocation before reading or writing a session family.
+function lockSessionOwner(tx, userId) {
+  return tx.$queryRaw`
+    SELECT "id" FROM "User" WHERE "id" = ${userId}::uuid FOR NO KEY UPDATE
+  `;
+}
 
-    const stored = await prisma.refreshToken.findUnique({
+function revokeFamily(client, userId, familyId) {
+  return client.refreshToken.updateMany({
+    where: { userId, familyId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+export async function revokeSession(refreshToken, accessToken) {
+  const stored = refreshToken
+    ? await prisma.refreshToken.findUnique({
+        where: { tokenHash: hashToken(refreshToken) },
+        select: { userId: true, familyId: true },
+      })
+    : null;
+  const access = readAccessSession(accessToken);
+  const session =
+    stored ?? (access && { userId: access.id, familyId: access.familyId });
+  if (!session) return;
+
+  await prisma.$transaction(async (tx) => {
+    await lockSessionOwner(tx, session.userId);
+    await revokeFamily(tx, session.userId, session.familyId);
+  });
+}
+
+function invalidRefreshToken() {
+  return new HttpError(
+    401,
+    'INVALID_REFRESH_TOKEN',
+    'Refresh token is invalid or expired.'
+  );
+}
+
+export async function refreshSession(token) {
+  const payload = verifyToken(token, process.env.JWT_REFRESH_SECRET);
+  if (!payload?.id || !payload.jti) throw invalidRefreshToken();
+
+  const result = await prisma.$transaction(async (tx) => {
+    await lockSessionOwner(tx, payload.id);
+    const stored = await tx.refreshToken.findUnique({
       where: { tokenHash: hashToken(token) },
+      include: { user: true },
     });
-
-    if (!stored || stored.userId !== payload.id) {
-      throw new HttpError(
-        401,
-        'INVALID_REFRESH_TOKEN',
-        'Refresh token is invalid.'
-      );
-    }
-
-    // A previously-used token indicates reuse: revoke the entire family.
-    if (stored.usedAt) {
-      await prisma.refreshToken.updateMany({
-        where: { familyId: stored.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-
-      throw new HttpError(
-        401,
-        'REFRESH_TOKEN_REUSED',
-        'Refresh token reuse detected.'
-      );
-    }
-
-    if (stored.revokedAt || stored.expiresAt <= new Date()) {
-      throw new HttpError(
-        401,
-        'INVALID_REFRESH_TOKEN',
-        'Refresh token is expired or revoked.'
-      );
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: stored.userId },
-    });
-
-    if (!user) {
-      throw new HttpError(
-        401,
-        'INVALID_REFRESH_TOKEN',
-        'Refresh token is invalid.'
-      );
-    }
-
     const now = new Date();
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
 
-    // Mark the old token used and create its replacement atomically.
-    const rotated = await prisma.$transaction(async (tx) => {
-      const result = await tx.refreshToken.updateMany({
-        where: {
-          id: stored.id,
-          usedAt: null,
-          revokedAt: null,
-        },
-        data: { usedAt: now },
-      });
-
-      if (result.count !== 1) return false;
-
-      await tx.refreshToken.create({
-        data: {
-          userId: user.id,
-          familyId: stored.familyId,
-          tokenHash: hashToken(refreshToken),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        },
-      });
-
-      return true;
-    });
-
-    if (!rotated) {
-      // Another request may have rotated this token concurrently.
-      await prisma.refreshToken.updateMany({
-        where: { familyId: stored.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-
-      throw new HttpError(
-        401,
-        'REFRESH_TOKEN_REUSED',
-        'Refresh token reuse detected.'
-      );
+    if (
+      !stored ||
+      stored.userId !== payload.id ||
+      stored.revokedAt ||
+      stored.expiresAt <= now
+    ) {
+      throw invalidRefreshToken();
     }
 
-    return { user: publicUser(user), accessToken, refreshToken };
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 401) throw error;
+    if (stored.usedAt) {
+      await revokeFamily(tx, stored.userId, stored.familyId);
+      return null;
+    }
 
-    // Refresh failures consistently use the HttpError contract.
+    await tx.refreshToken.update({
+      where: { id: stored.id },
+      data: { usedAt: now },
+    });
+    return createSession(stored.user, stored.familyId, tx);
+  });
+
+  if (!result) {
     throw new HttpError(
       401,
-      'INVALID_REFRESH_TOKEN',
-      'Refresh token is invalid or expired.'
+      'REFRESH_TOKEN_REUSED',
+      'Refresh token reuse detected.'
     );
   }
+  return result;
 }

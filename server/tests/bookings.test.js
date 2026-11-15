@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import jwt from 'jsonwebtoken';
+import { createTestAccessToken } from './fixtures/session.js';
 
 process.env.JWT_ACCESS_SECRET ||= 'booking-integration-test-secret';
 
@@ -84,16 +84,16 @@ test(
       });
     }
 
-    function call(method, path, userId) {
+    async function call(method, path, userId) {
       const token = userId
-        ? jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, {
-            expiresIn: '5m',
-          })
+        ? await createTestAccessToken(prisma, userId)
         : undefined;
 
       return fetch(`${baseUrl}/api${path}`, {
         method,
-        headers: token ? { cookie: `accessToken=${token}` } : {},
+        headers: token
+          ? { cookie: `accessToken=${token}`, origin: baseUrl }
+          : {},
       });
     }
 

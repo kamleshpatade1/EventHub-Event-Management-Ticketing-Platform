@@ -1,9 +1,9 @@
-import crypto from 'node:crypto';
 import { HttpError } from '../lib/errors.js';
 import {
   registerUser,
   loginUser,
   refreshSession,
+  revokeSession,
 } from '../services/auth.service.js';
 import { prisma } from '../db.js';
 
@@ -62,23 +62,7 @@ export function me(req, res) {
 }
 
 export async function logout(req, res) {
-  const token = req.cookies?.refreshToken;
-
-  if (token) {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const stored = await prisma.refreshToken.findUnique({
-      where: { tokenHash },
-      select: { familyId: true },
-    });
-
-    if (stored) {
-      await prisma.refreshToken.updateMany({
-        where: { familyId: stored.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-    }
-  }
-
+  await revokeSession(req.cookies?.refreshToken, req.cookies?.accessToken);
   clearSessionCookies(res);
   return res.status(204).end();
 }

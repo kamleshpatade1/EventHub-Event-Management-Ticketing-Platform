@@ -21,6 +21,12 @@ Copy the environment sample only on first setup; preserve an existing `.env`.
 If using the provided Docker database from your host, its port is **5433**.
 The API reads `server/.env`; frontend Vite configuration belongs in `client/.env`.
 
+Set `CORS_ORIGIN` to the exact browser origin, for example
+`http://localhost:5173` in development or `https://events.example.com` behind
+an HTTPS proxy. Cookie-authenticated API writes and login/signup require an
+`Origin` header matching that value or the direct request origin. Include the
+header when testing those requests with curl.
+
 Run `./setup.sh` to create a root `.env` symlink pointing to `server/.env`.
 The script preserves existing files/links and requires `server/.env` to exist.
 Check its behavior with `node --test tests/setup.test.mjs`.

@@ -193,12 +193,18 @@ function OrganizerEventDetails() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link
-              to={`/organizer/events/${event.id}/edit`}
-              className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold hover:bg-white/5"
-            >
-              Edit event
-            </Link>
+            {event.editLocked ? (
+              <p className="self-center text-sm text-gray-400">
+                Editing is locked while this event has active bookings.
+              </p>
+            ) : (
+              <Link
+                to={`/organizer/events/${event.id}/edit`}
+                className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold hover:bg-white/5"
+              >
+                Edit event
+              </Link>
+            )}
 
             <Link
               to={`/organizer/events/${event.id}/attendees`}
