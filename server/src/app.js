@@ -23,28 +23,32 @@ app.use(
   })
 );
 
+// The webhook signature is checked against the original bytes.
 app.use('/api/payments/webhook', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(cookieParser());
 app.use('/api', (req, res, next) => {
-  if (
-    ['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
-    (req.method === 'POST' && /^\/payments\/webhook\/?$/i.test(req.path))
-  ) {
-    return next();
-  }
+  const isReadRequest = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  if (isReadRequest) return next();
+
+  const isPaymentWebhook =
+    req.method === 'POST' && /^\/payments\/webhook\/?$/i.test(req.path);
+  if (isPaymentWebhook) return next();
 
   const startsSession = /^\/auth\/(login|register)\/?$/i.test(req.path);
-  if (startsSession || req.cookies.accessToken || req.cookies.refreshToken) {
-    const origin = req.get('Origin');
-    const sameOrigin = `${req.protocol}://${req.get('Host')}`;
-    if (!origin || (origin !== sameOrigin && origin !== browserOrigin)) {
-      throw new HttpError(
-        403,
-        'UNTRUSTED_ORIGIN',
-        'Request origin is not allowed.'
-      );
-    }
+  const hasSessionCookie = req.cookies.accessToken || req.cookies.refreshToken;
+  if (!startsSession && !hasSessionCookie) return next();
+
+  const origin = req.get('Origin');
+  const requestOrigin = `${req.protocol}://${req.get('Host')}`;
+
+  if (!origin || (origin !== requestOrigin && origin !== browserOrigin)) {
+    throw new HttpError(
+      403,
+      'UNTRUSTED_ORIGIN',
+      'Request origin is not allowed.'
+    );
   }
+
   next();
 });
 app.use(express.json({ limit: '16kb' }));

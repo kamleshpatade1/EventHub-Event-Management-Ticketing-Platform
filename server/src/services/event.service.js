@@ -44,33 +44,31 @@ function parseDate(value, field) {
   return date;
 }
 
-function getPublicEventSelect() {
-  return {
-    id: true,
-    title: true,
-    description: true,
-    category: true,
-    coverKey: true,
-    venue: true,
-    address: true,
-    city: true,
-    timezone: true,
-    startAt: true,
-    endAt: true,
-    registrationClosesAt: true,
-    capacity: true,
-    priceMinor: true,
-    currency: true,
-    status: true,
-    createdAt: true,
-    organizer: {
-      select: {
-        id: true,
-        name: true,
-      },
+const publicEventSelect = {
+  id: true,
+  title: true,
+  description: true,
+  category: true,
+  coverKey: true,
+  venue: true,
+  address: true,
+  city: true,
+  timezone: true,
+  startAt: true,
+  endAt: true,
+  registrationClosesAt: true,
+  capacity: true,
+  priceMinor: true,
+  currency: true,
+  status: true,
+  createdAt: true,
+  organizer: {
+    select: {
+      id: true,
+      name: true,
     },
-  };
-}
+  },
+};
 
 async function addAvailability(events) {
   if (events.length === 0) return events;
@@ -104,15 +102,15 @@ async function addAvailability(events) {
 export async function listPublicEvents(query) {
   const { q, category, city, pricing, from, to } = query;
 
-  // Validate search text.
-  if (q !== undefined) {
-    if (typeof q !== 'string' || q.trim().length > MAX_SEARCH_LENGTH) {
-      throw new HttpError(
-        400,
-        'INVALID_QUERY',
-        `Search must be at most ${MAX_SEARCH_LENGTH} characters.`
-      );
-    }
+  if (
+    q !== undefined &&
+    (typeof q !== 'string' || q.trim().length > MAX_SEARCH_LENGTH)
+  ) {
+    throw new HttpError(
+      400,
+      'INVALID_QUERY',
+      `Search must be at most ${MAX_SEARCH_LENGTH} characters.`
+    );
   }
 
   // Validate category and city.
@@ -154,53 +152,41 @@ export async function listPublicEvents(query) {
 
   const now = new Date();
 
-  // Events must be published, visible, and upcoming.
-  const startAtFilter = {
-    gte: fromDate && fromDate > now ? fromDate : now,
-    ...(toDate ? { lt: toDate } : {}),
-  };
+  const startAt = { gte: fromDate && fromDate > now ? fromDate : now };
+  if (toDate) startAt.lt = toDate;
 
   const where = {
     status: 'PUBLISHED',
     hiddenAt: null,
-    startAt: startAtFilter,
-
-    ...(q?.trim()
-      ? {
-          title: {
-            contains: q.trim(),
-            mode: 'insensitive',
-          },
-        }
-      : {}),
-
-    ...(category
-      ? {
-          category: {
-            equals: category.trim(),
-            mode: 'insensitive',
-          },
-        }
-      : {}),
-
-    ...(city
-      ? {
-          city: {
-            equals: city.trim(),
-            mode: 'insensitive',
-          },
-        }
-      : {}),
-
-    ...(pricing === 'free' ? { priceMinor: 0 } : {}),
-    ...(pricing === 'paid' ? { priceMinor: { gt: 0 } } : {}),
+    startAt,
   };
+
+  const search = q?.trim();
+  if (search) {
+    where.title = { contains: search, mode: 'insensitive' };
+  }
+
+  if (category) {
+    where.category = { equals: category.trim(), mode: 'insensitive' };
+  }
+
+  if (city) {
+    where.city = { equals: city.trim(), mode: 'insensitive' };
+  }
+
+  if (pricing === 'free') {
+    where.priceMinor = 0;
+  }
+
+  if (pricing === 'paid') {
+    where.priceMinor = { gt: 0 };
+  }
 
   const [total, events] = await prisma.$transaction([
     prisma.event.count({ where }),
     prisma.event.findMany({
       where,
-      select: getPublicEventSelect(),
+      select: publicEventSelect,
       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
       skip,
       take: limit,
@@ -238,7 +224,7 @@ export async function getPublicEvent(eventId) {
         in: ['PUBLISHED', 'CANCELLED'],
       },
     },
-    select: getPublicEventSelect(),
+    select: publicEventSelect,
   });
 
   if (!event) {

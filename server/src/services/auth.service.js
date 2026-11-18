@@ -4,32 +4,43 @@ import crypto from 'node:crypto';
 import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 
-const bcryptRounds = (() => {
-  const value = Number.parseInt(process.env.BCRYPT_ROUNDS ?? '10', 10);
-  return Number.isInteger(value) && value >= 4 && value <= 31 ? value : 10;
-})();
+const configuredBcryptRounds = Number.parseInt(
+  process.env.BCRYPT_ROUNDS ?? '10',
+  10
+);
+const bcryptRounds =
+  Number.isInteger(configuredBcryptRounds) &&
+  configuredBcryptRounds >= 4 &&
+  configuredBcryptRounds <= 31
+    ? configuredBcryptRounds
+    : 10;
 
-const hashToken = (token) =>
-  crypto.createHash('sha256').update(token).digest('hex');
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
-const generateAccessToken = (user, familyId) =>
-  jwt.sign({ id: user.id, familyId }, process.env.JWT_ACCESS_SECRET, {
+function generateAccessToken(user, familyId) {
+  return jwt.sign({ id: user.id, familyId }, process.env.JWT_ACCESS_SECRET, {
     expiresIn: '15m',
   });
+}
 
-const generateRefreshToken = (user) =>
-  jwt.sign(
+function generateRefreshToken(user) {
+  return jwt.sign(
     { id: user.id, jti: crypto.randomUUID() },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: '7d' }
   );
+}
 
-const publicUser = (user) => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-});
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
 
 async function createSession(
   user,
@@ -190,15 +201,21 @@ function revokeFamily(client, userId, familyId) {
 }
 
 export async function revokeSession(refreshToken, accessToken) {
-  const stored = refreshToken
-    ? await prisma.refreshToken.findUnique({
-        where: { tokenHash: hashToken(refreshToken) },
-        select: { userId: true, familyId: true },
-      })
-    : null;
-  const access = readAccessSession(accessToken);
-  const session =
-    stored ?? (access && { userId: access.id, familyId: access.familyId });
+  let session = null;
+
+  if (refreshToken) {
+    session = await prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(refreshToken) },
+      select: { userId: true, familyId: true },
+    });
+  }
+
+  // The access token identifies the same session if the refresh cookie is missing.
+  const accessSession = readAccessSession(accessToken);
+  if (!session && accessSession) {
+    session = { userId: accessSession.id, familyId: accessSession.familyId };
+  }
+
   if (!session) return;
 
   await prisma.$transaction(async (tx) => {
@@ -238,6 +255,7 @@ export async function refreshSession(token) {
 
     if (stored.usedAt) {
       await revokeFamily(tx, stored.userId, stored.familyId);
+      // Return normally so the transaction commits the revocation.
       return null;
     }
 

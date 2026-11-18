@@ -113,22 +113,70 @@ function isActiveBookingConflict(error) {
   );
 }
 
+// Lock the event before checking seats so two requests cannot sell the same seat.
+async function lockEventForBooking(tx, eventId) {
+  const lockedEvents = await lockEvent(tx, eventId);
+
+  if (lockedEvents.length === 0) {
+    throw new HttpError(
+      404,
+      'EVENT_UNAVAILABLE',
+      'Event not found or unavailable.'
+    );
+  }
+
+  return tx.event.findUnique({
+    where: { id: eventId },
+  });
+}
+
+function requireBookableEvent(event) {
+  if (!event || event.status === 'DRAFT' || event.hiddenAt) {
+    throw new HttpError(
+      404,
+      'EVENT_UNAVAILABLE',
+      'Event not found or unavailable.'
+    );
+  }
+
+  if (event.status === 'CANCELLED') {
+    throw new HttpError(
+      409,
+      'EVENT_UNAVAILABLE',
+      'This event has been cancelled.'
+    );
+  }
+}
+
+function requireOpenRegistration(event, now) {
+  if (event.registrationClosesAt <= now || event.startAt <= now) {
+    throw new HttpError(
+      409,
+      'REGISTRATION_CLOSED',
+      'Registration for this event is closed.'
+    );
+  }
+}
+
+function snapshotEvent(event) {
+  // Keep the event details as they were when the attendee booked.
+  return {
+    title: event.title,
+    startAt: event.startAt.toISOString(),
+    endAt: event.endAt.toISOString(),
+    venue: event.venue,
+    address: event.address,
+    city: event.city,
+    timezone: event.timezone,
+    priceMinor: event.priceMinor,
+    currency: event.currency,
+  };
+}
+
 export async function createFreeBooking(eventId, userId) {
   try {
     return await prisma.$transaction(async (tx) => {
-      const lockedEvents = await lockEvent(tx, eventId);
-
-      if (lockedEvents.length === 0) {
-        throw new HttpError(
-          404,
-          'EVENT_UNAVAILABLE',
-          'Event not found or unavailable.'
-        );
-      }
-
-      const event = await tx.event.findUnique({
-        where: { id: eventId },
-      });
+      const event = await lockEventForBooking(tx, eventId);
 
       const currentBooking = await findActiveBooking(tx, eventId, userId);
 
@@ -136,31 +184,11 @@ export async function createFreeBooking(eventId, userId) {
         return { booking: currentBooking, created: false };
       }
 
-      if (!event || event.status === 'DRAFT' || event.hiddenAt) {
-        throw new HttpError(
-          404,
-          'EVENT_UNAVAILABLE',
-          'Event not found or unavailable.'
-        );
-      }
-
-      if (event.status === 'CANCELLED') {
-        throw new HttpError(
-          409,
-          'EVENT_UNAVAILABLE',
-          'This event has been cancelled.'
-        );
-      }
+      requireBookableEvent(event);
 
       const now = new Date();
 
-      if (event.registrationClosesAt <= now || event.startAt <= now) {
-        throw new HttpError(
-          409,
-          'REGISTRATION_CLOSED',
-          'Registration for this event is closed.'
-        );
-      }
+      requireOpenRegistration(event, now);
 
       if (event.priceMinor !== 0) {
         throw new HttpError(
@@ -188,17 +216,7 @@ export async function createFreeBooking(eventId, userId) {
           status: 'CONFIRMED',
           amountMinor: 0,
           currency: event.currency,
-          eventSnapshot: {
-            title: event.title,
-            startAt: event.startAt.toISOString(),
-            endAt: event.endAt.toISOString(),
-            venue: event.venue,
-            address: event.address,
-            city: event.city,
-            timezone: event.timezone,
-            priceMinor: event.priceMinor,
-            currency: event.currency,
-          },
+          eventSnapshot: snapshotEvent(event),
           ticketCode: createTicketCode(),
         },
         select: bookingSelect,
@@ -221,38 +239,41 @@ export async function createFreeBooking(eventId, userId) {
   }
 }
 
+async function expirePaymentHolds(tx, eventId, now) {
+  const staleBookings = await tx.booking.findMany({
+    where: {
+      eventId,
+      status: 'PENDING_PAYMENT',
+      holdExpiresAt: { lte: now },
+    },
+    select: { id: true },
+  });
+  const staleBookingIds = staleBookings.map((booking) => booking.id);
+
+  if (staleBookingIds.length === 0) return;
+
+  await tx.payment.updateMany({
+    where: {
+      bookingId: { in: staleBookingIds },
+      status: 'OPEN',
+    },
+    data: { status: 'EXPIRED' },
+  });
+  await tx.booking.updateMany({
+    where: {
+      id: { in: staleBookingIds },
+      status: 'PENDING_PAYMENT',
+    },
+    data: { status: 'EXPIRED' },
+  });
+}
+
 export async function createPaidBooking(eventId, userId) {
   try {
     return await prisma.$transaction(async (tx) => {
-      const lockedEvents = await lockEvent(tx, eventId);
+      const event = await lockEventForBooking(tx, eventId);
 
-      if (lockedEvents.length === 0) {
-        throw new HttpError(
-          404,
-          'EVENT_UNAVAILABLE',
-          'Event not found or unavailable.'
-        );
-      }
-
-      const event = await tx.event.findUnique({
-        where: { id: eventId },
-      });
-
-      if (!event || event.status === 'DRAFT' || event.hiddenAt) {
-        throw new HttpError(
-          404,
-          'EVENT_UNAVAILABLE',
-          'Event not found or unavailable.'
-        );
-      }
-
-      if (event.status === 'CANCELLED') {
-        throw new HttpError(
-          409,
-          'EVENT_UNAVAILABLE',
-          'This event has been cancelled.'
-        );
-      }
+      requireBookableEvent(event);
 
       if (event.priceMinor <= 0) {
         throw new HttpError(
@@ -263,32 +284,7 @@ export async function createPaidBooking(eventId, userId) {
       }
 
       const now = new Date();
-      const staleBookings = await tx.booking.findMany({
-        where: {
-          eventId,
-          status: 'PENDING_PAYMENT',
-          holdExpiresAt: { lte: now },
-        },
-        select: { id: true },
-      });
-      const staleBookingIds = staleBookings.map((booking) => booking.id);
-
-      if (staleBookingIds.length > 0) {
-        await tx.payment.updateMany({
-          where: {
-            bookingId: { in: staleBookingIds },
-            status: 'OPEN',
-          },
-          data: { status: 'EXPIRED' },
-        });
-        await tx.booking.updateMany({
-          where: {
-            id: { in: staleBookingIds },
-            status: 'PENDING_PAYMENT',
-          },
-          data: { status: 'EXPIRED' },
-        });
-      }
+      await expirePaymentHolds(tx, eventId, now);
 
       const currentBooking = await findActivePaidBooking(
         tx,
@@ -302,13 +298,7 @@ export async function createPaidBooking(eventId, userId) {
         return { booking, payment, created: false };
       }
 
-      if (event.registrationClosesAt <= now || event.startAt <= now) {
-        throw new HttpError(
-          409,
-          'REGISTRATION_CLOSED',
-          'Registration for this event is closed.'
-        );
-      }
+      requireOpenRegistration(event, now);
 
       const activeBookingCount = await tx.booking.count({
         where: {
@@ -335,17 +325,7 @@ export async function createPaidBooking(eventId, userId) {
           amountMinor: event.priceMinor,
           currency: event.currency,
           holdExpiresAt: new Date(now.getTime() + getPaymentHoldDurationMs()),
-          eventSnapshot: {
-            title: event.title,
-            startAt: event.startAt.toISOString(),
-            endAt: event.endAt.toISOString(),
-            venue: event.venue,
-            address: event.address,
-            city: event.city,
-            timezone: event.timezone,
-            priceMinor: event.priceMinor,
-            currency: event.currency,
-          },
+          eventSnapshot: snapshotEvent(event),
         },
         select: paidBookingSelect,
       });

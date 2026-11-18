@@ -357,6 +357,45 @@ export async function updateOrganizerEvent(eventId, organizerId, body) {
   });
 }
 
+function validateBeforePublishing(event) {
+  const errors = {};
+  const now = new Date();
+
+  if (event.startAt <= now) {
+    errors.startAt = 'The event start date must be in the future.';
+  }
+
+  if (event.endAt <= event.startAt) {
+    errors.endAt = 'The event end date must be after the start date.';
+  }
+
+  if (event.registrationClosesAt > event.startAt) {
+    errors.registrationClosesAt =
+      'Registration deadline cannot be after the event starts.';
+  }
+
+  if (event.capacity < 1 || event.capacity > 2147483647) {
+    errors.capacity =
+      'Capacity must be a positive integer within the allowed limit.';
+  }
+
+  if (
+    !Number.isInteger(event.priceMinor) ||
+    event.priceMinor < 0 ||
+    event.priceMinor > 2147483647
+  ) {
+    errors.priceMinor =
+      'Price must be a non-negative integer within the allowed limit.';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    invalidInput(
+      'Event cannot be published until its fields are corrected.',
+      errors
+    );
+  }
+}
+
 export async function publishOrganizerEvent(eventId, organizerId) {
   return prisma.$transaction(async (tx) => {
     const event = await lockOwnedEvent(tx, eventId, organizerId);
@@ -377,42 +416,7 @@ export async function publishOrganizerEvent(eventId, organizerId) {
       );
     }
 
-    const errors = {};
-    const now = new Date();
-
-    if (event.startAt <= now) {
-      errors.startAt = 'The event start date must be in the future.';
-    }
-
-    if (event.endAt <= event.startAt) {
-      errors.endAt = 'The event end date must be after the start date.';
-    }
-
-    if (event.registrationClosesAt > event.startAt) {
-      errors.registrationClosesAt =
-        'Registration deadline cannot be after the event starts.';
-    }
-
-    if (event.capacity < 1 || event.capacity > 2147483647) {
-      errors.capacity =
-        'Capacity must be a positive integer within the allowed limit.';
-    }
-
-    if (
-      !Number.isInteger(event.priceMinor) ||
-      event.priceMinor < 0 ||
-      event.priceMinor > 2147483647
-    ) {
-      errors.priceMinor =
-        'Price must be a non-negative integer within the allowed limit.';
-    }
-
-    if (Object.keys(errors).length > 0) {
-      invalidInput(
-        'Event cannot be published until its fields are corrected.',
-        errors
-      );
-    }
+    validateBeforePublishing(event);
 
     return tx.event.update({
       where: { id: event.id },
@@ -530,14 +534,8 @@ export async function listOrganizerAttendees(eventId, organizerId, query = {}) {
   const event = await findOwnedEvent(eventId, organizerId);
   const { page, limit, skip } = parsePagination(query);
 
-  const search =
-    query.search === undefined
-      ? ''
-      : typeof query.search === 'string'
-        ? query.search.trim()
-        : null;
-
-  if (search === null || search.length > 100) {
+  const rawSearch = query.search === undefined ? '' : query.search;
+  if (typeof rawSearch !== 'string' || rawSearch.trim().length > 100) {
     throw new HttpError(
       400,
       'INVALID_QUERY',
@@ -545,6 +543,7 @@ export async function listOrganizerAttendees(eventId, organizerId, query = {}) {
     );
   }
 
+  const search = rawSearch.trim();
   const { checkedIn } = query;
   if (
     checkedIn !== undefined &&
@@ -561,18 +560,19 @@ export async function listOrganizerAttendees(eventId, organizerId, query = {}) {
   const where = {
     eventId: event.id,
     status: 'CONFIRMED',
-    ...(checkedIn !== undefined && {
-      checkedInAt: checkedIn === 'true' ? { not: null } : null,
-    }),
-    ...(search
-      ? {
-          OR: [
-            { user: { name: { contains: search, mode: 'insensitive' } } },
-            ...(UUID_REGEX.test(search) ? [{ id: search }] : []),
-          ],
-        }
-      : {}),
   };
+
+  if (checkedIn !== undefined) {
+    where.checkedInAt = checkedIn === 'true' ? { not: null } : null;
+  }
+
+  if (search) {
+    where.OR = [{ user: { name: { contains: search, mode: 'insensitive' } } }];
+
+    if (UUID_REGEX.test(search)) {
+      where.OR.push({ id: search });
+    }
+  }
 
   const [total, bookings] = await prisma.$transaction([
     prisma.booking.count({ where }),

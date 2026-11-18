@@ -70,6 +70,21 @@ function serializeCheckout(session) {
   };
 }
 
+function findBookingWithPayment(tx, bookingId, userId) {
+  return tx.booking.findFirst({
+    where: { id: bookingId, userId },
+    select: {
+      id: true,
+      eventId: true,
+      status: true,
+      holdExpiresAt: true,
+      amountMinor: true,
+      currency: true,
+      payment: { select: checkoutPaymentSelect },
+    },
+  });
+}
+
 export async function createBookingCheckout(bookingId, userId) {
   const reference = await findOwnedBooking(bookingId, userId);
 
@@ -80,36 +95,15 @@ export async function createBookingCheckout(bookingId, userId) {
     const lockedBookings = await lockBooking(tx, bookingId);
     if (lockedBookings.length === 0) notFound();
 
-    const booking = await tx.booking.findFirst({
-      where: { id: bookingId, userId },
-      select: {
-        id: true,
-        eventId: true,
-        status: true,
-        holdExpiresAt: true,
-        amountMinor: true,
-        currency: true,
-        payment: { select: checkoutPaymentSelect },
-      },
-    });
+    const booking = await findBookingWithPayment(tx, bookingId, userId);
 
     if (!booking?.payment) notFound();
 
     const lockedPayments = await lockPayment(tx, booking.payment.id);
     if (lockedPayments.length === 0) notFound();
 
-    const currentBooking = await tx.booking.findFirst({
-      where: { id: bookingId, userId },
-      select: {
-        id: true,
-        eventId: true,
-        status: true,
-        holdExpiresAt: true,
-        amountMinor: true,
-        currency: true,
-        payment: { select: checkoutPaymentSelect },
-      },
-    });
+    // Read again after locking the payment so the checks use its locked state.
+    const currentBooking = await findBookingWithPayment(tx, bookingId, userId);
 
     if (!currentBooking?.payment) notFound();
 
@@ -349,6 +343,12 @@ async function updatePaymentFromProvider({
       return { payment, booking, duplicate: true };
     }
 
+    const isPendingPayment =
+      booking.status === 'PENDING_PAYMENT' && payment.status === 'OPEN';
+
+    let nextPaymentStatus;
+    let nextBookingStatus;
+
     if (providerStatus === 'PAID') {
       const holdExpired =
         booking.status === 'EXPIRED' ||
@@ -356,74 +356,52 @@ async function updatePaymentFromProvider({
         (booking.status === 'PENDING_PAYMENT' && booking.holdExpiresAt <= now);
 
       if (holdExpired) {
-        const updatedPayment = await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: 'REFUND_REQUIRED',
-            ...(providerPaymentId ? { providerPaymentId } : {}),
-          },
-        });
-        const updatedBooking = await tx.booking.update({
-          where: { id: booking.id },
-          data: { status: 'REFUND_REQUIRED' },
-        });
-        return {
-          payment: updatedPayment,
-          booking: updatedBooking,
-          duplicate: false,
-        };
-      }
-
-      if (booking.status !== 'PENDING_PAYMENT' || payment.status !== 'OPEN') {
+        // Another buyer may already have the seat. A late payment needs review.
+        nextPaymentStatus = 'REFUND_REQUIRED';
+        nextBookingStatus = 'REFUND_REQUIRED';
+      } else if (isPendingPayment) {
+        nextPaymentStatus = 'PAID';
+        nextBookingStatus = 'CONFIRMED';
+      } else {
         throw new HttpError(
           409,
           'PAYMENT_NOT_PROCESSABLE',
           'This payment can no longer be processed.'
         );
       }
-
-      const updatedPayment = await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: 'PAID',
-          ...(providerPaymentId ? { providerPaymentId } : {}),
-        },
-      });
-      const updatedBooking = await tx.booking.update({
-        where: { id: booking.id },
-        data: {
-          status: 'CONFIRMED',
-          ticketCode: createTicketCode(),
-          holdExpiresAt: null,
-        },
-      });
-
-      return {
-        payment: updatedPayment,
-        booking: updatedBooking,
-        duplicate: false,
-      };
+    } else if (providerStatus === 'FAILED' && isPendingPayment) {
+      nextPaymentStatus = 'EXPIRED';
+      nextBookingStatus = 'EXPIRED';
+    } else {
+      return { payment, booking, duplicate: true };
     }
 
-    if (providerStatus === 'FAILED') {
-      if (booking.status === 'PENDING_PAYMENT' && payment.status === 'OPEN') {
-        const updatedPayment = await tx.payment.update({
-          where: { id: payment.id },
-          data: { status: 'EXPIRED' },
-        });
-        const updatedBooking = await tx.booking.update({
-          where: { id: booking.id },
-          data: { status: 'EXPIRED' },
-        });
-        return {
-          payment: updatedPayment,
-          booking: updatedBooking,
-          duplicate: false,
-        };
-      }
+    const paymentChanges = { status: nextPaymentStatus };
+    if (providerStatus === 'PAID' && providerPaymentId) {
+      paymentChanges.providerPaymentId = providerPaymentId;
     }
 
-    return { payment, booking, duplicate: true };
+    const updatedPayment = await tx.payment.update({
+      where: { id: payment.id },
+      data: paymentChanges,
+    });
+
+    const bookingChanges = { status: nextBookingStatus };
+    if (nextBookingStatus === 'CONFIRMED') {
+      bookingChanges.ticketCode = createTicketCode();
+      bookingChanges.holdExpiresAt = null;
+    }
+
+    const updatedBooking = await tx.booking.update({
+      where: { id: booking.id },
+      data: bookingChanges,
+    });
+
+    return {
+      payment: updatedPayment,
+      booking: updatedBooking,
+      duplicate: false,
+    };
   });
 }
 

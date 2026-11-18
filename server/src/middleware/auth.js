@@ -4,31 +4,32 @@ import { readAccessSession } from '../services/auth.service.js';
 
 export async function requireAuth(req, res, next) {
   const session = readAccessSession(req.cookies?.accessToken);
-  const user =
-    session &&
-    (await prisma.user.findFirst({
-      where: {
-        id: session.id,
-        refreshTokens: {
-          some: {
-            familyId: session.familyId,
-            usedAt: null,
-            revokedAt: null,
-            expiresAt: { gt: new Date() },
-          },
+  if (!session) throw new HttpError(401, 'UNAUTHENTICATED', 'Please log in.');
+
+  // Read the current role and check that the session is still active in the DB.
+  const user = await prisma.user.findFirst({
+    where: {
+      id: session.id,
+      refreshTokens: {
+        some: {
+          familyId: session.familyId,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
         },
       },
-      select: { id: true, name: true, email: true, role: true },
-    }));
+    },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
   if (!user) throw new HttpError(401, 'UNAUTHENTICATED', 'Please log in.');
 
   req.user = user;
   next();
 }
 
-export const requireRole =
-  (...roles) =>
-  (req, res, next) => {
+export function requireRole(...roles) {
+  return function checkRole(req, res, next) {
     if (!roles.includes(req.user?.role)) {
       throw new HttpError(
         403,
@@ -38,3 +39,4 @@ export const requireRole =
     }
     next();
   };
+}

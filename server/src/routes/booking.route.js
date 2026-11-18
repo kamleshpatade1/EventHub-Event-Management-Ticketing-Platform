@@ -15,9 +15,7 @@ import {
 } from '../controllers/booking.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 
-// Owner: Person C. Mounted at /api, so define full paths:
-// /events/:eventId/bookings, /bookings/..., /organizer/events/:eventId/check-ins, /payments/webhook
-// The webhook receives a raw Buffer body (see app.js) for signature checks.
+// app.js mounts these routes under /api and keeps the webhook body as raw bytes.
 const router = Router();
 
 router.get('/bookings', requireAuth, listBookings);
