@@ -1,3 +1,13 @@
+export const eventCategories = [
+  'Music',
+  'Comedy',
+  'Workshops',
+  'Tech & Business',
+  'Art & Culture',
+  'Sports',
+  'Food & Drinks',
+];
+
 const categoryCovers = new Map([
   ['music', 'indie'],
   ['comedy', 'stand-up'],
@@ -9,11 +19,20 @@ const categoryCovers = new Map([
   ['sports', 'football'],
   ['food & drinks', 'food'],
 ]);
-const coverKeys = new Set([...categoryCovers.values(), 'default']);
+export const eventCovers = new Map([
+  ['indie', 'Live music'],
+  ['stand-up', 'Stand-up comedy'],
+  ['pottery', 'Pottery workshop'],
+  ['dance', 'Dance performance'],
+  ['makers', 'Makers and technology'],
+  ['football', 'Football'],
+  ['food', 'Food and drinks'],
+  ['default', 'General event'],
+]);
 
 export function getEventCover(event) {
   const category = event.category?.trim().toLowerCase();
-  const cover = coverKeys.has(event.coverKey)
+  const cover = eventCovers.has(event.coverKey)
     ? event.coverKey
     : (categoryCovers.get(category) ?? 'default');
 

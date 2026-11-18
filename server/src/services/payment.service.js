@@ -8,7 +8,7 @@ import {
   recordTestWebhookStatus,
   verifyPaymentWebhookSignature,
 } from './test-payment-provider.js';
-import { createTicketCode } from './booking.service.js';
+import { createTicketCode, getUserBooking } from './booking.service.js';
 
 const checkoutPaymentSelect = {
   id: true,
@@ -174,7 +174,7 @@ export async function createBookingCheckout(bookingId, userId) {
   };
 }
 
-export async function processTestCheckoutOutcome(checkoutId, userId, status) {
+function validateTestCheckout(checkoutId) {
   if (process.env.PAYMENT_PROVIDER_MODE !== 'test') {
     throw new HttpError(
       503,
@@ -193,6 +193,37 @@ export async function processTestCheckoutOutcome(checkoutId, userId, status) {
       'Checkout session not found.'
     );
   }
+}
+
+async function findOwnedTestCheckout(checkoutId, userId) {
+  const payment = await prisma.payment.findFirst({
+    where: {
+      provider: 'razorpay',
+      providerCheckoutId: checkoutId,
+      booking: { userId },
+    },
+    select: { bookingId: true },
+  });
+
+  if (!payment) {
+    throw new HttpError(
+      404,
+      'CHECKOUT_NOT_FOUND',
+      'Checkout session not found.'
+    );
+  }
+
+  return payment;
+}
+
+export async function getTestCheckoutBooking(checkoutId, userId) {
+  validateTestCheckout(checkoutId);
+  const payment = await findOwnedTestCheckout(checkoutId, userId);
+  return getUserBooking(payment.bookingId, userId);
+}
+
+export async function processTestCheckoutOutcome(checkoutId, userId, status) {
+  validateTestCheckout(checkoutId);
 
   if (!['PAID', 'FAILED'].includes(status)) {
     throw new HttpError(
@@ -211,22 +242,7 @@ export async function processTestCheckoutOutcome(checkoutId, userId, status) {
     );
   }
 
-  const payment = await prisma.payment.findFirst({
-    where: {
-      provider: 'razorpay',
-      providerCheckoutId: checkoutId,
-      booking: { userId },
-    },
-    select: { bookingId: true },
-  });
-
-  if (!payment) {
-    throw new HttpError(
-      404,
-      'CHECKOUT_NOT_FOUND',
-      'Checkout session not found.'
-    );
-  }
+  const payment = await findOwnedTestCheckout(checkoutId, userId);
 
   const payload = {
     eventId: `test_${checkoutId}_${crypto.randomUUID()}`,

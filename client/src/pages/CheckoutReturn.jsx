@@ -7,6 +7,7 @@ import {
   ErrorMessage,
   LoadingState,
   Panel,
+  StatusBadge,
 } from './BookingUI.jsx';
 import {
   formatMoney,
@@ -14,7 +15,6 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from './bookingUtils.js';
-import { StatusBadge } from './BookingUI.jsx';
 
 function CheckoutReturn() {
   const [searchParams] = useSearchParams();
@@ -117,10 +117,7 @@ function CheckoutReturn() {
       : booking?.status === 'CONFIRMED' && payment?.status === 'PAID';
 
   return (
-    <BookingPageFrame
-      subtitle="A return from checkout does not prove payment. Status is confirmed directly by the server."
-      title="Checkout Status"
-    >
+    <BookingPageFrame title="Checkout status">
       {!bookingId ? (
         <Panel>
           <Alert tone="info">
@@ -181,13 +178,13 @@ function CheckoutReturn() {
             </p>
             {booking.status === 'PENDING_PAYMENT' && (
               <p className="mt-3 text-sm leading-relaxed text-[#a36209]">
-                Payment is still pending. Refresh below to reconcile provider
-                status.
+                Payment is still pending. Check the latest status below.
               </p>
             )}
             {booking.status === 'EXPIRED' && (
               <p className="mt-3 text-sm leading-relaxed text-[#63564b]">
-                This booking expired. No ticket is available.
+                This reservation ended before payment was confirmed. You can try
+                booking again if seats are available.
               </p>
             )}
             {booking.status === 'REFUND_REQUIRED' && (
@@ -197,7 +194,7 @@ function CheckoutReturn() {
             )}
             {booking.status === 'CONFIRMED' && paymentVerified && (
               <p className="mt-3 text-sm leading-relaxed text-[#1b6e49] font-medium">
-                Reconciliation confirmed your payment and booked admission.
+                Your booking is confirmed. Your admission pass is ready.
               </p>
             )}
             {booking.status === 'CONFIRMED' &&
@@ -215,16 +212,27 @@ function CheckoutReturn() {
             )}
           </Panel>
           <div className="flex flex-wrap gap-3">
-            {booking.amountMinor > 0 && !paymentVerified && (
-              <button
+            {booking.status === 'EXPIRED' && booking.eventId && (
+              <Link
                 className={primaryButtonClass}
-                disabled={refreshing}
-                onClick={refreshStatus}
-                type="button"
+                to={`/events/${encodeURIComponent(booking.eventId)}`}
               >
-                {refreshing ? 'Checking…' : 'Refresh payment status'}
-              </button>
+                Try booking again
+              </Link>
             )}
+            {booking.amountMinor > 0 &&
+              !paymentVerified &&
+              !needsCheckoutSession &&
+              (booking.status === 'PENDING_PAYMENT' || error) && (
+                <button
+                  className={primaryButtonClass}
+                  disabled={refreshing}
+                  onClick={refreshStatus}
+                  type="button"
+                >
+                  {refreshing ? 'Checking…' : 'Refresh payment status'}
+                </button>
+              )}
             {booking.amountMinor > 0 && needsCheckoutSession && (
               <Link
                 className={secondaryButtonClass}

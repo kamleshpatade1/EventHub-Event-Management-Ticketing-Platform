@@ -66,7 +66,12 @@ function validateEmail(email, fields) {
   }
 }
 
-export async function registerUser({ name, email, password } = {}) {
+export async function registerUser({
+  name,
+  email,
+  password,
+  role = 'ATTENDEE',
+} = {}) {
   const fields = {};
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -76,6 +81,10 @@ export async function registerUser({ name, email, password } = {}) {
   }
 
   validateEmail(email, fields);
+
+  if (role !== 'ATTENDEE' && role !== 'ORGANIZER') {
+    fields.role = 'Select Attendee or Organizer.';
+  }
 
   if (
     typeof password !== 'string' ||
@@ -98,15 +107,18 @@ export async function registerUser({ name, email, password } = {}) {
 
   try {
     const passwordHash = await bcrypt.hash(password, bcryptRounds);
-    const user = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        email: normalizedEmail,
-        passwordHash,
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: name.trim(),
+          email: normalizedEmail,
+          passwordHash,
+          role,
+        },
+      });
 
-    return await createSession(user);
+      return createSession(user, undefined, tx);
+    });
   } catch (error) {
     if (error instanceof HttpError) throw error;
 

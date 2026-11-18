@@ -7,20 +7,10 @@ import { api } from '../lib/api.js';
 import {
   buildCatalogQuery,
   clearCatalogFilters,
+  eventCategories,
   getEventCover,
   updateCatalogFilter,
 } from './eventCatalog.js';
-
-const categories = [
-  'All',
-  'Music',
-  'Comedy',
-  'Workshops',
-  'Tech & Business',
-  'Art & Culture',
-  'Sports',
-  'Food & Drinks',
-];
 
 function formatPrice(event) {
   const amount = Number(event.priceMinor ?? 0) / 100;
@@ -177,7 +167,7 @@ export default function Events() {
                 }
                 className="bg-transparent text-sm font-medium text-[#211c18] outline-none"
               >
-                {categories.map((item) => (
+                {['All', ...eventCategories].map((item) => (
                   <option
                     key={item}
                     value={item}

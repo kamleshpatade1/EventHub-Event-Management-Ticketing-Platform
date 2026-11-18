@@ -55,6 +55,7 @@ function Signup() {
     password: '',
     confirmPassword: '',
     acceptTerms: false,
+    role: 'ATTENDEE',
   });
 
   const [errors, setErrors] = useState({});
@@ -101,13 +102,14 @@ function Signup() {
           name: formValues.fullName.trim(),
           email: formValues.email.trim(),
           password: formValues.password,
+          role: formValues.role,
         },
       });
 
       const user = result?.data ?? result;
 
       setUser(user);
-      navigate('/');
+      navigate(user.role === 'ORGANIZER' ? '/organizer' : '/');
     } catch (error) {
       const fieldErrors = error?.fields ?? {};
       const mappedErrors = {};
@@ -156,6 +158,25 @@ function Signup() {
       title="Create Account"
     >
       <form className="space-y-3" noValidate onSubmit={handleSubmit}>
+        <div className="space-y-1">
+          <label
+            className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"
+            htmlFor="signup-role"
+          >
+            Register as
+          </label>
+          <select
+            className={inputClassName}
+            id="signup-role"
+            name="role"
+            onChange={handleChange}
+            value={formValues.role}
+          >
+            <option value="ATTENDEE">Attendee</option>
+            <option value="ORGANIZER">Organizer</option>
+          </select>
+        </div>
+
         <div className="space-y-1">
           <label
             className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]"

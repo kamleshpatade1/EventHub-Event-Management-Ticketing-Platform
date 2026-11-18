@@ -55,6 +55,8 @@ test(
     const server = createServer(app);
     const email = `auth-test-${crypto.randomUUID()}@example.test`;
 
+    const organizerEmail = `organizer-${email}`;
+
     await prisma.$connect();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -85,12 +87,43 @@ test(
     }
 
     t.after(async () => {
-      await prisma.user.deleteMany({ where: { email } });
+      await prisma.user.deleteMany({
+        where: { email: { in: [email, organizerEmail] } },
+      });
       await new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve()))
       );
       await prisma.$disconnect();
     });
+
+    await t.test(
+      'public signup grants organizer access but rejects admin',
+      async () => {
+        const details = {
+          name: 'Organizer Test User',
+          email: organizerEmail,
+          password: 'password123',
+        };
+        const rejected = await post('/api/auth/register', {
+          ...details,
+          role: 'ADMIN',
+        });
+        assert.equal(rejected.status, 400);
+
+        const registered = await post('/api/auth/register', {
+          ...details,
+          role: 'ORGANIZER',
+        });
+        assert.equal(registered.status, 201);
+        assert.equal((await registered.json()).data.role, 'ORGANIZER');
+
+        const cookie = cookiePair(registered, 'accessToken');
+        const workspace = await fetch(`${baseUrl}/api/organizer/events`, {
+          headers: { cookie },
+        });
+        assert.equal(workspace.status, 200);
+      }
+    );
 
     // Register
     const registered = await post('/api/auth/register', {
@@ -99,7 +132,9 @@ test(
       password: 'password123',
     });
     assert.equal(registered.status, 201);
-    assert.equal((await registered.json()).data.email, email);
+    const { data: attendee } = await registered.json();
+    assert.equal(attendee.email, email);
+    assert.equal(attendee.role, 'ATTENDEE');
     const originalRefreshCookie = cookiePair(registered, 'refreshToken');
 
     // Login

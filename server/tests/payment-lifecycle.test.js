@@ -476,6 +476,23 @@ test(
       'test checkout requires authentication and prevents cross-user actions',
       async () => {
         const { booking, checkout } = await reserveAndCheckout();
+        const checkoutPath = `/api/test-checkouts/${encodeURIComponent(checkout.id)}`;
+        const guestSummary = await fetch(`${baseUrl}${checkoutPath}`);
+        const crossUserSummary = await authenticatedGet(
+          checkoutPath,
+          otherAttendee.id
+        );
+        const ownerSummary = await authenticatedGet(checkoutPath, attendee.id);
+
+        assert.equal(guestSummary.status, 401);
+        assert.equal(crossUserSummary.status, 404);
+        assert.equal(ownerSummary.status, 200);
+        assert.equal(ownerSummary.headers.get('cache-control'), 'no-store');
+        const { data: summary } = await ownerSummary.json();
+        assert.equal(summary.id, booking.id);
+        assert.equal(summary.amountMinor, booking.amountMinor);
+        assert.equal(summary.status, 'PENDING_PAYMENT');
+
         const path = `/api/test-checkouts/${encodeURIComponent(checkout.id)}/outcome`;
         const unauthenticated = await fetch(`${baseUrl}${path}`, {
           method: 'POST',

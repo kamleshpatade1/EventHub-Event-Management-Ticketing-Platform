@@ -189,10 +189,10 @@ export default function EventDetails() {
     try {
       if (isEventPaid(event)) {
         const bookingResponse = await api(
-          `/events/${encodeURIComponent(eventId)}/bookings`,
+          `/events/${encodeURIComponent(eventId)}/bookings/paid`,
           { method: 'POST' }
         );
-        const booking = bookingResponse.data ?? bookingResponse.ticket;
+        const booking = bookingResponse.data?.booking;
         const alreadyBooked = bookingResponse.created === false;
 
         if (!booking?.id) {

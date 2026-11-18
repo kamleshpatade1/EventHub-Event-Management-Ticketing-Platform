@@ -9,6 +9,7 @@ import {
 } from '../services/booking.service.js';
 import {
   createBookingCheckout,
+  getTestCheckoutBooking,
   processPaymentWebhook,
   processTestCheckoutOutcome,
   reconcileBookingPayment,
@@ -78,6 +79,14 @@ export async function createCheckout(req, res) {
 
   const checkout = await createBookingCheckout(bookingId, req.user.id);
   return res.status(200).json({ data: checkout });
+}
+
+export async function getTestCheckout(req, res) {
+  const booking = await getTestCheckoutBooking(
+    req.params.checkoutId,
+    req.user.id
+  );
+  return res.set('Cache-Control', 'no-store').json({ data: booking });
 }
 
 export async function processTestCheckout(req, res) {

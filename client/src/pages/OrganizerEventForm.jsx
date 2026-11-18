@@ -5,11 +5,13 @@ import Navbar from '../components/Navbar.jsx';
 import Footer from '../components/Footer.jsx';
 import { api } from '../lib/api.js';
 import { saveOrganizerEvent } from '../lib/organizerEventWorkflow.js';
+import { eventCategories, eventCovers, getEventCover } from './eventCatalog.js';
 
 const initialForm = {
   title: '',
   description: '',
   category: '',
+  coverKey: '',
   venue: '',
   address: '',
   city: '',
@@ -24,7 +26,6 @@ const initialForm = {
 
 const fields = [
   ['title', 'Event title', 'text'],
-  ['category', 'Category', 'text'],
   ['venue', 'Venue name', 'text'],
   ['address', 'Full address', 'text'],
   ['city', 'City', 'text'],
@@ -80,6 +81,7 @@ function toPayload(form, originalDates = {}) {
     title: form.title.trim(),
     description: form.description.trim(),
     category: form.category.trim(),
+    coverKey: form.coverKey || null,
     venue: form.venue.trim(),
     address: form.address.trim(),
     city: form.city.trim(),
@@ -146,6 +148,7 @@ function OrganizerEventForm() {
           title: event.title ?? '',
           description: event.description ?? '',
           category: event.category ?? '',
+          coverKey: event.coverKey ?? '',
           venue: event.venue ?? '',
           address: event.address ?? '',
           city: event.city ?? '',
@@ -197,7 +200,7 @@ function OrganizerEventForm() {
     const errors = {};
 
     if (!payload.title) errors.title = 'Title is required.';
-    if (!payload.category) errors.category = 'Category is required.';
+    if (!payload.category) errors.category = 'Select a category.';
     if (!payload.venue) errors.venue = 'Venue is required.';
     if (!payload.address) errors.address = 'Address is required.';
     if (!payload.city) errors.city = 'City is required.';
@@ -451,6 +454,41 @@ function OrganizerEventForm() {
                 </label>
               ))}
 
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                Category
+                <select
+                  name="category"
+                  value={form.category}
+                  onChange={updateField}
+                  aria-invalid={Boolean(fieldErrors.category)}
+                  aria-describedby={
+                    fieldErrors.category ? 'category-error' : undefined
+                  }
+                  className={inputClass('category')}
+                >
+                  <option value="" disabled>
+                    Select a category
+                  </option>
+                  {form.category &&
+                    !eventCategories.includes(form.category) && (
+                      <option value={form.category}>{form.category}</option>
+                    )}
+                  {eventCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.category && (
+                  <span
+                    id="category-error"
+                    className="mt-1 block text-xs text-[#9f3b27]"
+                  >
+                    {fieldErrors.category}
+                  </span>
+                )}
+              </label>
+
               <label className="block text-xs font-semibold uppercase tracking-wider text-[#63564b] sm:col-span-2">
                 Description
                 <textarea
@@ -475,6 +513,49 @@ function OrganizerEventForm() {
                   </span>
                 )}
               </label>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-4 border-b border-[#eadecc] pb-2 font-serif text-xl font-bold text-[#211c18]">
+              Event cover
+            </h2>
+
+            <div className="grid items-start gap-5 sm:grid-cols-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#63564b]">
+                Cover image
+                <select
+                  name="coverKey"
+                  value={eventCovers.has(form.coverKey) ? form.coverKey : ''}
+                  onChange={updateField}
+                  className={inputClass('coverKey')}
+                  aria-invalid={Boolean(fieldErrors.coverKey)}
+                  aria-describedby={
+                    fieldErrors.coverKey ? 'coverKey-error' : undefined
+                  }
+                >
+                  <option value="">Automatic (by category)</option>
+                  {Array.from(eventCovers, ([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.coverKey && (
+                  <span
+                    id="coverKey-error"
+                    className="mt-1 block text-xs text-[#9f3b27]"
+                  >
+                    {fieldErrors.coverKey}
+                  </span>
+                )}
+              </label>
+
+              <img
+                src={getEventCover(form)}
+                alt="Event cover preview"
+                className="aspect-video w-full rounded-xl bg-[#f3eee6] object-cover"
+              />
             </div>
           </section>
 

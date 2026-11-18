@@ -1,148 +1,220 @@
-import { useRef, useState } from 'react';
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { api } from '../lib/api.js';
-import { Alert, BookingPageFrame, Panel } from './BookingUI.jsx';
-import { primaryButtonClass, secondaryButtonClass } from './bookingUtils.js';
+import {
+  Alert,
+  BookingPageFrame,
+  ErrorMessage,
+  LoadingState,
+  Panel,
+  StatusBadge,
+} from './BookingUI.jsx';
+import {
+  formatEventDate,
+  formatMoney,
+  getEventDetails,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from './bookingUtils.js';
 
 function TestCheckout() {
   const { checkoutId } = useParams();
   const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const bookingId = searchParams.get('bookingId')?.trim() ?? '';
   const navigate = useNavigate();
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState('');
+  const bookingReference = searchParams.get('bookingId')?.trim();
+  const checkoutPath = `/test-checkouts/${encodeURIComponent(checkoutId)}`;
+  const [checkout, setCheckout] = useState(null);
+  const [retry, setRetry] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const [processing, setProcessing] = useState(null);
+  const [error, setError] = useState(null);
   const processingLock = useRef(false);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    api(checkoutPath, { signal: controller.signal })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) {
+          setCheckout({ checkoutId, booking: data });
+        }
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) {
+          setCheckout({ checkoutId, error: requestError });
+        }
+      });
+    return () => controller.abort();
+  }, [checkoutId, checkoutPath, retry]);
+
+  const current = checkout?.checkoutId === checkoutId ? checkout : null;
+  const booking = current?.booking;
+  const pending = booking?.status === 'PENDING_PAYMENT';
+  const holdEndsAt = booking?.holdExpiresAt
+    ? Date.parse(booking.holdExpiresAt)
+    : null;
+  const hasDeadline = pending && Number.isFinite(holdEndsAt);
+  const remainingSeconds = hasDeadline
+    ? Math.max(0, Math.ceil((holdEndsAt - now) / 1000))
+    : null;
+  const holdExpired = remainingSeconds === 0;
+  const referenceMismatch = Boolean(
+    booking && bookingReference && booking.id !== bookingReference
+  );
+  const event = getEventDetails(booking);
+
+  useEffect(() => {
+    if (!hasDeadline || holdExpired) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [hasDeadline, holdExpired]);
+
   async function submitOutcome(status) {
-    if (processingLock.current || processing) return;
+    if (processingLock.current || !pending || referenceMismatch) return;
     processingLock.current = true;
-    setProcessing(true);
-    setError('');
+    setProcessing(status);
+    setError(null);
 
     try {
-      const response = await api(
-        `/test-checkouts/${encodeURIComponent(checkoutId)}/outcome`,
-        { method: 'POST', body: { status } }
-      );
-      const verifiedBookingId = response.data?.bookingId;
-
-      if (!verifiedBookingId || verifiedBookingId !== bookingId) {
-        setError(
-          'We could not verify this checkout against its booking. Please open checkout again from your booking details.'
+      const response = await api(`${checkoutPath}/outcome`, {
+        method: 'POST',
+        body: { status },
+      });
+      if (response.data?.bookingId !== booking.id) {
+        throw new Error(
+          'We could not verify the booking. Open checkout again from booking details.'
         );
-        return;
       }
-
-      navigate(
-        `/checkout/return?bookingId=${encodeURIComponent(verifiedBookingId)}`
-      );
+      navigate(`/checkout/return?bookingId=${encodeURIComponent(booking.id)}`, {
+        replace: true,
+      });
     } catch (requestError) {
-      if (
-        requestError.status === 401 ||
-        requestError.code === 'UNAUTHENTICATED'
-      ) {
-        setError('Your session has expired. Sign in again to continue.');
-      } else if (
-        requestError.status === 404 ||
-        requestError.code === 'CHECKOUT_NOT_FOUND'
-      ) {
-        setError(
-          'This test checkout is unavailable. Open your booking details to start a new checkout.'
-        );
-      } else if (
-        requestError.status === 503 ||
-        requestError.code === 'PAYMENT_PROVIDER_UNAVAILABLE' ||
-        requestError.code === 'PAYMENT_WEBHOOK_NOT_CONFIGURED'
-      ) {
-        setError(
-          'Test payments are temporarily unavailable. Please contact the event organizer or try again later.'
-        );
-      } else {
-        setError(
-          'We could not process this test payment. Please try again or return to your booking details.'
-        );
-      }
+      setError(requestError);
     } finally {
       processingLock.current = false;
-      setProcessing(false);
+      setProcessing(null);
     }
   }
 
   return (
     <BookingPageFrame
-      subtitle="This is a simulated test payment environment. No real payment gateway or real currency is charged."
-      title="Test Checkout"
+      subtitle="This is a test payment. No real money is charged."
+      title="Test checkout"
     >
       <Panel className="max-w-2xl">
-        <div className="space-y-6">
-          <Alert tone="info">
-            Choose an outcome to simulate the payment provider response. Your
-            booking status will be verified and processed by the server upon
-            receipt.
-          </Alert>
-          {typeof location.state?.notice === 'string' && (
-            <Alert tone="info">{location.state.notice}</Alert>
-          )}
-          <div className="rounded-xl border border-[#d4c7b9] bg-[#faf7f2] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#63564b]">
-              Test Checkout Session ID
-            </p>
-            <p className="mt-1.5 break-all font-mono text-sm font-semibold text-[#9f3b27]">
-              {checkoutId}
-            </p>
+        {!current ? (
+          <LoadingState label="Loading test checkout…" />
+        ) : current.error || referenceMismatch ? (
+          <div className="space-y-4">
+            {referenceMismatch || current.error?.status === 404 ? (
+              <Alert>
+                This checkout is unavailable. Open it again from your booking
+                details.
+              </Alert>
+            ) : (
+              <ErrorMessage error={current.error} />
+            )}
+            {current.error && ![401, 404].includes(current.error.status) && (
+              <button
+                className={primaryButtonClass}
+                onClick={() => {
+                  setCheckout(null);
+                  setRetry((value) => value + 1);
+                }}
+                type="button"
+              >
+                Retry checkout
+              </button>
+            )}
+            <Link className={secondaryButtonClass} to="/my-bookings">
+              My bookings
+            </Link>
           </div>
-          {!bookingId && (
-            <Alert>
-              The booking reference is missing. Return to your booking details
-              and open checkout again.
-            </Alert>
-          )}
-          {error && <Alert>{error}</Alert>}
-          {processing && (
-            <p
-              aria-live="polite"
-              role="status"
-              className="text-sm font-medium text-[#63564b]"
-            >
-              Processing test payment outcome…
-            </p>
-          )}
-          <div className="flex flex-wrap gap-3 pt-2">
-            <button
-              className={primaryButtonClass}
-              disabled={processing || !bookingId || !checkoutId}
-              onClick={() => submitOutcome('PAID')}
-              type="button"
-            >
-              {processing ? 'Processing…' : 'Simulate Successful Payment'}
-            </button>
-            <button
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#f4bebe] bg-[#fbebe8] px-5 py-2.5 text-sm font-semibold text-[#9f3b27] transition-colors hover:bg-[#f8ded9] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={processing || !bookingId || !checkoutId}
-              onClick={() => submitOutcome('FAILED')}
-              type="button"
-            >
-              Simulate Failed Payment
-            </button>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eadecc] pb-5">
+              <div>
+                <h2 className="font-serif text-2xl font-bold">{event.title}</h2>
+                <p className="mt-1 text-sm text-[#63564b]">
+                  {formatEventDate(event.startAt, event.timezone)}
+                  {event.venue && ` · ${event.venue}`}
+                </p>
+              </div>
+              <StatusBadge status={booking.status} />
+            </div>
+
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-[#63564b]">1 ticket</p>
+                <p className="mt-1 font-serif text-3xl font-bold">
+                  {formatMoney(booking.amountMinor, booking.currency)}
+                </p>
+              </div>
+              {hasDeadline && !holdExpired && (
+                <p className="text-sm font-semibold tabular-nums text-[#a36209]">
+                  Seat held for {Math.floor(remainingSeconds / 60)}:
+                  {String(remainingSeconds % 60).padStart(2, '0')}
+                </p>
+              )}
+            </div>
+
+            {holdExpired && (
+              <Alert tone="info">
+                Your seat hold expired. Simulating a late payment sends it for
+                review without issuing a ticket.
+              </Alert>
+            )}
+            {error && <ErrorMessage error={error} />}
+            {pending ? (
+              <div>
+                <p className="mb-3 text-sm text-[#63564b]">
+                  {holdExpired
+                    ? 'Try the late-payment case or return to your booking.'
+                    : 'Successful payment issues your ticket. Failed payment releases your seat.'}
+                </p>
+                <div
+                  className="flex flex-wrap gap-3"
+                  aria-busy={Boolean(processing)}
+                >
+                  <button
+                    className={primaryButtonClass}
+                    disabled={Boolean(processing)}
+                    onClick={() => submitOutcome('PAID')}
+                    type="button"
+                  >
+                    {processing === 'PAID'
+                      ? 'Processing test payment…'
+                      : holdExpired
+                        ? 'Simulate late payment'
+                        : 'Simulate successful payment'}
+                  </button>
+                  {!holdExpired && (
+                    <button
+                      className={secondaryButtonClass}
+                      disabled={Boolean(processing)}
+                      onClick={() => submitOutcome('FAILED')}
+                      type="button"
+                    >
+                      {processing === 'FAILED'
+                        ? 'Processing failure…'
+                        : 'Simulate failed payment'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-[#63564b]">
+                This checkout has ended. Open your booking to see the result.
+              </p>
+            )}
+
             <Link
               className={secondaryButtonClass}
-              to={
-                bookingId
-                  ? `/bookings/${encodeURIComponent(bookingId)}`
-                  : '/my-bookings'
-              }
+              to={`/bookings/${encodeURIComponent(booking.id)}`}
             >
               Return to booking
             </Link>
           </div>
-        </div>
+        )}
       </Panel>
     </BookingPageFrame>
   );

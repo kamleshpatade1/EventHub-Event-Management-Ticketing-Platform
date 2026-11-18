@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { api } from '../lib/api.js';
 import {
   Alert,
@@ -21,13 +21,13 @@ import {
 function BookingDetails() {
   const { bookingId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(location.state?.notice ?? null);
   const [busyAction, setBusyAction] = useState('');
-  const [checkout, setCheckout] = useState(null);
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
   const [retry, setRetry] = useState(0);
@@ -41,7 +41,6 @@ function BookingDetails() {
         );
         if (!active) return;
         setBooking(response.data);
-        setCheckout(null);
 
         if (
           response.data.status === 'CONFIRMED' &&
@@ -104,8 +103,10 @@ function BookingDetails() {
         `/bookings/${encodeURIComponent(bookingId)}/checkout`,
         { method: 'POST' }
       );
-      setCheckout(response.data.checkout);
-      setNotice('Your test checkout session is ready to resume.');
+      const checkoutId = response.data.checkout.id;
+      navigate(
+        `/checkout/test/${encodeURIComponent(checkoutId)}?bookingId=${encodeURIComponent(bookingId)}`
+      );
     });
   }
 
@@ -116,7 +117,6 @@ function BookingDetails() {
         { method: 'POST' }
       );
       setBooking(response.data.booking);
-      setCheckout(null);
       const isVerified =
         response.data.booking.status === 'CONFIRMED' &&
         response.data.payment.status === 'PAID';
@@ -282,20 +282,6 @@ function BookingDetails() {
                 Reservation hold expires{' '}
                 {formatEventDate(booking.holdExpiresAt, event.timezone)}.
               </p>
-            )}
-            {checkout && (
-              <div className="mt-4 rounded-xl border border-[#d4c7b9] bg-[#faf7f2] p-4 text-sm text-[#211c18]">
-                <p>
-                  Test session:{' '}
-                  <code className="break-all font-mono font-semibold text-[#9f3b27]">
-                    {checkout.id}
-                  </code>
-                </p>
-                <p className="mt-1 text-xs text-[#63564b]">
-                  Session status: {checkout.status}
-                  {checkout.testMode ? ' · test mode' : ''}
-                </p>
-              </div>
             )}
             <div className="mt-6 flex flex-wrap gap-3">
               <button

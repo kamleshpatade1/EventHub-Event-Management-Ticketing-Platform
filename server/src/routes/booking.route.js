@@ -7,6 +7,7 @@ import {
   getBooking,
   getBookingTicket,
   getEventBooking,
+  getTestCheckout,
   listBookings,
   paymentWebhook,
   processTestCheckout,
@@ -24,6 +25,7 @@ router.get('/bookings/:bookingId', requireAuth, getBooking);
 router.get('/bookings/:bookingId/ticket', requireAuth, getBookingTicket);
 router.post('/bookings/:bookingId/cancel', requireAuth, cancelBooking);
 router.post('/bookings/:bookingId/checkout', requireAuth, createCheckout);
+router.get('/test-checkouts/:checkoutId', requireAuth, getTestCheckout);
 router.post(
   '/test-checkouts/:checkoutId/outcome',
   requireAuth,
