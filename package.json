@@ -11,6 +11,7 @@
     "dev": "pnpm db:up && pnpm db:generate && pnpm db:deploy && turbo run dev",
     "dev:client": "pnpm --filter client dev",
     "dev:server": "pnpm db:up && pnpm db:generate && pnpm db:deploy && pnpm --filter server dev",
+    "start": "pnpm --filter server start",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
